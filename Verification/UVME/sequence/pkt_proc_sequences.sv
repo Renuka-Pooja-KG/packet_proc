@@ -7,15 +7,16 @@ class sequence_base extends uvm_sequence #(pkt_proc_seq_item);
   int idle_cycles = 3;     // Number of idle cycles after reset
   bit enable_reset = 1;    // Enable/disable reset initialization
   
+  // Transaction handle
+  pkt_proc_seq_item tr;
+  
   function new(string name = "sequence_base");
     super.new(name);
   endfunction
 
   // Initialize DUT with proper reset sequence
-  task automatic initialize_dut();
+  virtual task initialize_dut();
     if (!enable_reset) return;
-    
-    pkt_proc_seq_item tr;
     
     `uvm_info("SEQUENCE_BASE", $sformatf("Initializing DUT with %0d reset cycles", reset_cycles), UVM_LOW)
     
@@ -94,8 +95,6 @@ class write_only_sequence extends sequence_base;
     // Call parent initialization (includes reset)
     super.body();
     
-    pkt_proc_seq_item tr;
-    
     `uvm_info("WRITE_ONLY_SEQ", $sformatf("Starting write-only sequence with %0d writes", write_count), UVM_LOW)
     
     for (int i = 0; i < write_count; i++) begin
@@ -127,8 +126,6 @@ class read_only_sequence extends sequence_base;
   virtual task body();
     // Call parent initialization (includes reset)
     super.body();
-    
-    pkt_proc_seq_item tr;
     
     `uvm_info("READ_ONLY_SEQ", $sformatf("Starting read-only sequence with %0d reads", read_count), UVM_LOW)
     
@@ -203,7 +200,6 @@ class packet_write_sequence extends sequence_base;
     // Call parent initialization (includes reset)
     super.body();
     
-    pkt_proc_seq_item tr;
     int packet_length;
     
     `uvm_info("PACKET_WRITE_SEQ", $sformatf("Starting packet write sequence: %0d packets", packet_count), UVM_LOW)
@@ -276,8 +272,6 @@ class continuous_read_sequence extends sequence_base;
     // Call parent initialization (includes reset)
     super.body();
     
-    pkt_proc_seq_item tr;
-    
     `uvm_info("CONTINUOUS_READ_SEQ", $sformatf("Starting continuous read sequence: %0d reads", read_count), UVM_LOW)
     
     for (int i = 0; i < read_count; i++) begin
@@ -309,8 +303,6 @@ class mixed_operations_sequence extends sequence_base;
   virtual task body();
     // Call parent initialization (includes reset)
     super.body();
-    
-    pkt_proc_seq_item tr;
     
     `uvm_info("MIXED_OPS_SEQ", $sformatf("Starting mixed operations sequence: %0d transactions", transaction_count), UVM_LOW)
     
@@ -344,8 +336,6 @@ class overflow_test_sequence extends sequence_base;
   virtual task body();
     // Call parent initialization (includes reset)
     super.body();
-    
-    pkt_proc_seq_item tr;
     
     `uvm_info("OVERFLOW_SEQ", $sformatf("Starting overflow test sequence: %0d writes", write_count), UVM_LOW)
     
@@ -381,8 +371,6 @@ class underflow_test_sequence extends sequence_base;
   virtual task body();
     // Call parent initialization (includes reset)
     super.body();
-    
-    pkt_proc_seq_item tr;
     
     `uvm_info("UNDERFLOW_SEQ", $sformatf("Starting underflow test sequence: %0d reads", read_count), UVM_LOW)
     
