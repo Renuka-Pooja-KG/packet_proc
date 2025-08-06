@@ -1,4 +1,4 @@
-//`timescale 1ns/1ps
+`timescale 1ns/1ps
 module pck_len_fifo
               #(parameter DATA_WIDTH   = 12     , 
                           DEPTH        = 32     , 

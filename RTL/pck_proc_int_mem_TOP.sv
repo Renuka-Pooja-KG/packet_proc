@@ -20,7 +20,7 @@
 * Created By :  
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
-//`timescale 1ns/1ps
+`timescale 1ns/1ps
 module pck_proc_int_mem_fsm
                   #(
                     parameter   DATA_WIDTH      = 32             ,
@@ -274,7 +274,8 @@ module pck_proc_int_mem_fsm
 
                    //assign pck_valid 
                    assign pck_valid   = (((present_state_w==WRITE_HEADER) || (present_state_w==WRITE_DATA)) && enq_req_r && (~pck_proc_overflow ))            ;
-                   assign pck_invalid = (((in_sop && in_eop) ||/* (in_sop_r && in_sop_r1)||*/ (in_sop && (~in_eop_r1) && (present_state_w==WRITE_DATA)) || ((count_w < pck_len_r2 - 12'd1) && (pck_len_r2 != {PCK_LEN{1'b0}}) && (in_eop_r1)) || ((count_w == pck_len_r2-1'b1 || (pck_len_r2 == {PCK_LEN{1'b0}})) && (~in_eop_r1) && (present_state_w==WRITE_DATA)) || (pck_proc_overflow)) && enq_req)        ;
+                   assign pck_invalid = (((in_sop && in_eop) ||// (in_sop_r && in_sop_r1)|| 
+                                        (in_sop && (~in_eop_r1) && (present_state_w==WRITE_DATA)) || ((count_w < pck_len_r2 - 12'd1) && (pck_len_r2 != {PCK_LEN{1'b0}}) && (in_eop_r1)) || ((count_w == pck_len_r2-1'b1 || (pck_len_r2 == {PCK_LEN{1'b0}})) && (~in_eop_r1) && (present_state_w==WRITE_DATA)) || (pck_proc_overflow)) && enq_req)        ;
 
 
                    assign invalid_1 =  (in_sop && in_eop)      ;

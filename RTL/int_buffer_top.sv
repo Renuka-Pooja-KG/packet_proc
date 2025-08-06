@@ -1,4 +1,4 @@
-//`timescale 1ns/1ps
+`timescale 1ns/1ps
 module int_buffer_top
               #(parameter DATA_WIDTH        = 32     , 
                           DEPTH             = 16384  , 

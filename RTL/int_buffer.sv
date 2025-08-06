@@ -20,7 +20,7 @@
 * Created By :  
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////*/
-//`timescale 1ns/1ps
+`timescale 1ns/1ps
 module int_buffer
                  #( 
                    parameter    DATA_WIDTH = 32     ,
