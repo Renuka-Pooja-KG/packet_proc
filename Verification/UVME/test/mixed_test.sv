@@ -27,31 +27,31 @@ class mixed_test extends uvm_test;
     `uvm_info(get_type_name(), "Test 1: Mixed operations scenario", UVM_LOW)
     seq.scenario = 7;  // Mixed ops scenario
     seq.num_transactions = 60;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 2: Concurrent R/W scenario
     `uvm_info(get_type_name(), "Test 2: Concurrent R/W scenario", UVM_LOW)
     seq.scenario = 4;  // Concurrent R/W scenario
     seq.num_transactions = 50;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 3: Random scenario
     `uvm_info(get_type_name(), "Test 3: Random scenario", UVM_LOW)
     seq.scenario = 0;  // Random scenario
     seq.num_transactions = 40;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 4: Overflow scenario
     `uvm_info(get_type_name(), "Test 4: Overflow scenario", UVM_LOW)
     seq.scenario = 8;  // Overflow scenario
     seq.num_transactions = 80;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 5: Underflow scenario
     `uvm_info(get_type_name(), "Test 5: Underflow scenario", UVM_LOW)
     seq.scenario = 9;  // Underflow scenario
     seq.num_transactions = 80;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     `uvm_info(get_type_name(), "Mixed operations test suite completed", UVM_LOW)
     phase.drop_objection(this);

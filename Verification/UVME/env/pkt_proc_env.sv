@@ -2,7 +2,7 @@ class pkt_proc_env extends uvm_env;
   `uvm_component_utils(pkt_proc_env)
 
   // Single enhanced agent
-  pkt_proc_agent pkt_proc_agent;
+  pkt_proc_agent m_pkt_proc_agent;
   
   // Enhanced scoreboard
   pkt_proc_scoreboard scoreboard;
@@ -25,7 +25,7 @@ class pkt_proc_env extends uvm_env;
       `uvm_fatal("NOVIF", "Virtual interface not set for enhanced environment")
     
     // Create enhanced agent
-    pkt_proc_agent = pkt_proc_agent::type_id::create("pkt_proc_agent", this);
+    m_pkt_proc_agent = pkt_proc_agent::type_id::create("m_pkt_proc_agent", this);
     
     // Create enhanced scoreboard
     scoreboard = pkt_proc_scoreboard::type_id::create("scoreboard", this);
@@ -40,10 +40,10 @@ class pkt_proc_env extends uvm_env;
     super.connect_phase(phase);
     
     // Connect enhanced agent to scoreboard
-    pkt_proc_agent.agent_analysis_port.connect(scoreboard.analysis_export);
+    m_pkt_proc_agent.agent_analysis_port.connect(scoreboard.analysis_export);
     
     // Connect enhanced agent to coverage
-    pkt_proc_agent.agent_analysis_port.connect(coverage.cov_export);
+    m_pkt_proc_agent.agent_analysis_port.connect(coverage.cov_export);
     
     `uvm_info(get_type_name(), "Pkt_proc Environment connect phase completed", UVM_LOW)
   endfunction

@@ -28,7 +28,7 @@ class packet_write_test extends uvm_test;
     `uvm_info(get_type_name(), $sformatf("Starting packet write test with scenario %0d", seq.scenario), UVM_LOW)
     
     // Start the sequence
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     `uvm_info(get_type_name(), "Packet write test run_phase completed", UVM_LOW)
     phase.drop_objection(this);

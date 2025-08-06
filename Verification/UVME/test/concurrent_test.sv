@@ -27,31 +27,31 @@ class concurrent_test extends uvm_test;
     `uvm_info(get_type_name(), "Test 1: Concurrent R/W - Light load", UVM_LOW)
     seq.scenario = 4;  // Concurrent R/W scenario
     seq.num_transactions = 30;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 2: Concurrent R/W scenario - Medium load
     `uvm_info(get_type_name(), "Test 2: Concurrent R/W - Medium load", UVM_LOW)
     seq.scenario = 4;  // Concurrent R/W scenario
     seq.num_transactions = 60;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 3: Concurrent R/W scenario - Heavy load
     `uvm_info(get_type_name(), "Test 3: Concurrent R/W - Heavy load", UVM_LOW)
     seq.scenario = 4;  // Concurrent R/W scenario
     seq.num_transactions = 100;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 4: Mixed operations with concurrent access
     `uvm_info(get_type_name(), "Test 4: Mixed operations", UVM_LOW)
     seq.scenario = 7;  // Mixed ops scenario
     seq.num_transactions = 80;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 5: Continuous read with concurrent write
     `uvm_info(get_type_name(), "Test 5: Continuous read scenario", UVM_LOW)
     seq.scenario = 6;  // Continuous read scenario
     seq.num_transactions = 70;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     `uvm_info(get_type_name(), "Concurrent operations test suite completed", UVM_LOW)
     phase.drop_objection(this);
