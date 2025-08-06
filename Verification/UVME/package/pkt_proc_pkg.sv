@@ -10,7 +10,6 @@ package pkt_proc_pkg;
   // Include all UVM components
   `include "./../UVME/sequence/pkt_proc_seq_item.sv"
   `include "./../UVME/sequence/pkt_proc_sequences.sv"
-  `include "./../UVME/sequence/reset_test_sequences.sv"
   
   `include "./../UVME/agent/pkt_proc_driver.sv"
   `include "./../UVME/agent/pkt_proc_monitor.sv"

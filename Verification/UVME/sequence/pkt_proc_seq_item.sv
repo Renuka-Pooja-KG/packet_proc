@@ -1,3 +1,13 @@
+//=============================================================================
+// File: pkt_proc_seq_item.sv
+// Description: Packet Processor UVM Sequence Item
+// Author: [Your Name]
+// Date: [Date]
+//=============================================================================
+
+`ifndef PKT_PROC_SEQ_ITEM_SV
+`define PKT_PROC_SEQ_ITEM_SV
+
 class pkt_proc_seq_item extends uvm_sequence_item;
 
   // Reset signals (shared)
@@ -144,3 +154,5 @@ class pkt_proc_seq_item extends uvm_sequence_item;
 //   endfunction
 
 endclass 
+
+`endif // PKT_PROC_SEQ_ITEM_SV 
