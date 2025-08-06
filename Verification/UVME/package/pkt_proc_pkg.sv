@@ -17,9 +17,11 @@ package pkt_proc_pkg;
   `include "./../UVME/agent/pkt_proc_sequencer.sv"
   `include "./../UVME/agent/pkt_proc_agent.sv"
   
-  `include "./../UVME/env/pkt_proc_env.sv"
+  // Environment components
   `include "./../UVME/env/pkt_proc_scoreboard.sv"
   `include "./../UVME/env/pkt_proc_coverage.sv"
+  `include "./../UVME/env/pkt_proc_env.sv"
+ 
   
 
     // Add these lines to your package file

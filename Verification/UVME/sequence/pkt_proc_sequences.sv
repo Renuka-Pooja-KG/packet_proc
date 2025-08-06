@@ -12,7 +12,7 @@ class sequence_base extends uvm_sequence #(pkt_proc_seq_item);
   endfunction
 
   // Initialize DUT with proper reset sequence
-  task initialize_dut();
+  task automatic initialize_dut();
     if (!enable_reset) return;
     
     pkt_proc_seq_item tr;
@@ -71,7 +71,7 @@ class sequence_base extends uvm_sequence #(pkt_proc_seq_item);
   endtask
 
   // Default body - should be overridden by derived classes
-  task body();
+  task automatic body();
     // Initialize DUT first
     initialize_dut();
     
@@ -90,7 +90,7 @@ class write_only_sequence extends sequence_base;
     super.new(name);
   endfunction
 
-  task body();
+  task automatic body();
     // Call parent initialization (includes reset)
     super.body();
     
@@ -124,7 +124,7 @@ class read_only_sequence extends sequence_base;
     super.new(name);
   endfunction
 
-  task body();
+  task automatic body();
     // Call parent initialization (includes reset)
     super.body();
     
@@ -159,7 +159,7 @@ class concurrent_rw_sequence extends sequence_base;
     super.new(name);
   endfunction
 
-  task body();
+  task automatic body();
     // Call parent initialization (includes reset)
     super.body();
     
@@ -199,7 +199,7 @@ class packet_write_sequence extends sequence_base;
     super.new(name);
   endfunction
 
-  task body();
+  task automatic body();
     // Call parent initialization (includes reset)
     super.body();
     
@@ -272,7 +272,7 @@ class continuous_read_sequence extends sequence_base;
     super.new(name);
   endfunction
 
-  task body();
+  task automatic body();
     // Call parent initialization (includes reset)
     super.body();
     
@@ -306,7 +306,7 @@ class mixed_operations_sequence extends sequence_base;
     super.new(name);
   endfunction
 
-  task body();
+  task automatic body();
     // Call parent initialization (includes reset)
     super.body();
     
@@ -341,7 +341,7 @@ class overflow_test_sequence extends sequence_base;
     super.new(name);
   endfunction
 
-  task body();
+  task automatic body();
     // Call parent initialization (includes reset)
     super.body();
     
@@ -378,7 +378,7 @@ class underflow_test_sequence extends sequence_base;
     super.new(name);
   endfunction
 
-  task body();
+  task automatic body();
     // Call parent initialization (includes reset)
     super.body();
     
