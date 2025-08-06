@@ -27,31 +27,31 @@ class packet_read_test extends uvm_test;
     `uvm_info(get_type_name(), "Test 1: Write packets for reading", UVM_LOW)
     seq.scenario = 5;  // Packet write scenario
     seq.num_transactions = 40;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 2: Read-only operations
     `uvm_info(get_type_name(), "Test 2: Read-only operations", UVM_LOW)
     seq.scenario = 3;  // Read-only scenario
     seq.num_transactions = 50;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 3: Continuous read operations
     `uvm_info(get_type_name(), "Test 3: Continuous read operations", UVM_LOW)
     seq.scenario = 6;  // Continuous read scenario
     seq.num_transactions = 60;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 4: Mixed read/write operations
     `uvm_info(get_type_name(), "Test 4: Mixed read/write operations", UVM_LOW)
     seq.scenario = 4;  // Concurrent R/W scenario
     seq.num_transactions = 70;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 5: Underflow scenario (read when empty)
     `uvm_info(get_type_name(), "Test 5: Underflow scenario", UVM_LOW)
     seq.scenario = 9;  // Underflow scenario
     seq.num_transactions = 80;
-    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     `uvm_info(get_type_name(), "Packet read test suite completed", UVM_LOW)
     phase.drop_objection(this);
