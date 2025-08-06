@@ -42,16 +42,16 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
     output empty_de_assert;
     output enq_req;
     output in_sop;
-    output [31:0] wr_data_i;
+    output wr_data_i;
     output in_eop;
     output pck_len_valid;
-    output [11:0] pck_len_i;
+    output pck_len_i;
     output deq_req;
     output pck_proc_almost_full_value;
     output pck_proc_almost_empty_value;
 
     input out_sop;
-    input [31:0] rd_data_o;
+    input rd_data_o;
     input out_eop;
     input pck_proc_full;
     input pck_proc_empty;
@@ -60,7 +60,7 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
     input pck_proc_overflow;
     input pck_proc_underflow;
     input packet_drop;
-    input [13:0] pck_proc_wr_lvl;
+    input pck_proc_wr_lvl;
   endclocking
 
   //Clocking block to the monitor
@@ -69,7 +69,7 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
     //Monitoring the outputs from the DUT
     default input #0 output #1;
     input out_sop;
-    input [31:0] rd_data_o;
+    input rd_data_o;
     input out_eop;
     input pck_proc_full;
     input pck_proc_empty;
@@ -78,17 +78,17 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
     input pck_proc_overflow;
     input pck_proc_underflow;
     input packet_drop;
-    input [13:0] pck_proc_wr_lvl;
+    input pck_proc_wr_lvl;
 
     //Monitoring the inputs to the DUT 
     input pck_proc_int_mem_fsm_sw_rstn;
     input empty_de_assert;
     input enq_req;
     input in_sop;
-    input [31:0] wr_data_i;
+    input wr_data_i;
     input in_eop;
     input pck_len_valid;
-    input [11:0] pck_len_i;
+    input pck_len_i;
     input deq_req;
     input pck_proc_almost_full_value;
     input pck_proc_almost_empty_value;
