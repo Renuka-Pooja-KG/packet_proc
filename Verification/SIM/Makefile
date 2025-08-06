@@ -26,7 +26,7 @@ all: base_test packet_write_test packet_read_test reset_test concurrent_test mix
 # Base test case - Basic write/read operations
 base_test:
 	@echo "[makefile]  base test case is running"
-	xrun -access +rwc -f compile_list.f +UVM_TESTNAME=basic_test -uvmhome CDNS-1.1d
+	xrun -access +rwc -f compile_list.f +UVM_TESTNAME=base_test -uvmhome CDNS-1.1d
 	@echo "[makefile]  base test case run is completed successfully"
 
 # Packet write test case
