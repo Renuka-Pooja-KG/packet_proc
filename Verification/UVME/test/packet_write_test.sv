@@ -4,7 +4,7 @@
 class packet_write_test extends uvm_test;
   `uvm_component_utils(packet_write_test)
 
-  env m_env;
+  pkt_proc_env m_env;
   pkt_proc_base_sequence seq;
 
   function new(string name = "packet_write_test", uvm_component parent = null);
@@ -13,7 +13,7 @@ class packet_write_test extends uvm_test;
 
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
-    m_env = env::type_id::create("m_env", this);
+    m_env = pkt_proc_env::type_id::create("m_env", this);
     seq = pkt_proc_base_sequence::type_id::create("seq");
     `uvm_info(get_type_name(), "Packet write test build_phase completed", UVM_LOW)
   endfunction
@@ -28,7 +28,7 @@ class packet_write_test extends uvm_test;
     `uvm_info(get_type_name(), $sformatf("Starting packet write test with scenario %0d", seq.scenario), UVM_LOW)
     
     // Start the sequence
-    seq.start(m_env.m_agent.m_sequencer);
+    seq.start(m_env.pkt_proc_agent.m_pkt_proc_sequencer);
     
     `uvm_info(get_type_name(), "Packet write test run_phase completed", UVM_LOW)
     phase.drop_objection(this);

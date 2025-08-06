@@ -23,6 +23,12 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   int idle_cycles = 3;     // Number of idle cycles after reset
   bit enable_reset = 1;    // Enable/disable reset initialization
   
+  // Packet configuration
+  int packet_count = 5;
+  int min_packet_length = 4;
+  int max_packet_length = 16;
+  int packet_length;
+  
   // Transaction handle
   pkt_proc_seq_item tr;
   
@@ -218,14 +224,9 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     end
   endtask
 
-  // Packet write scenario
+    // Packet write scenario
   task packet_write_scenario();
     initialize_dut();
-    
-    int packet_count = 5;
-    int min_packet_length = 4;
-    int max_packet_length = 16;
-    int packet_length;
     
     `uvm_info(get_type_name(), $sformatf("Starting packet write scenario: %0d packets", packet_count), UVM_LOW)
     
@@ -717,6 +718,6 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     end
   endtask
 
-endclass
+endclass 
 
 `endif // PKT_PROC_SEQUENCES_SV 
