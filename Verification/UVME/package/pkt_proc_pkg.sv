@@ -21,10 +21,8 @@ package pkt_proc_pkg;
   `include "./../UVME/env/pkt_proc_scoreboard.sv"
   `include "./../UVME/env/pkt_proc_coverage.sv"
   `include "./../UVME/env/pkt_proc_env.sv"
- 
   
-
-    // Add these lines to your package file
+  // Test files
   `include "./../UVME/test/base_test.sv"
   `include "./../UVME/test/packet_write_test.sv"
   `include "./../UVME/test/packet_read_test.sv"

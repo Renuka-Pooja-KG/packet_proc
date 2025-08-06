@@ -12,7 +12,7 @@ class reset_initialization_sequence extends uvm_sequence #(pkt_proc_seq_item);
     super.new(name);
   endfunction
 
-  task automatic body();
+  virtual task body();
     pkt_proc_seq_item tr;
     
     `uvm_info("RESET_INIT_SEQ", $sformatf("Initializing DUT with %0d reset cycles", reset_cycles), UVM_LOW)
@@ -80,7 +80,7 @@ class reset_test_sequence_base extends uvm_sequence #(pkt_proc_seq_item);
     super.new(name);
   endfunction
 
-  task automatic body();
+  virtual task body();
     pkt_proc_seq_item tr;
     
     for (int i = 0; i < operation_count; i++) begin
@@ -106,7 +106,7 @@ class async_reset_test_sequence extends reset_test_sequence_base;
     super.new(name);
   endfunction
 
-  task automatic body();
+  virtual task body();
     pkt_proc_seq_item tr;
     
     `uvm_info("ASYNC_RESET_SEQ", "Starting async reset test sequence", UVM_LOW)
@@ -186,7 +186,7 @@ class sync_reset_test_sequence extends reset_test_sequence_base;
     super.new(name);
   endfunction
 
-  task automatic body();
+  virtual task body();
     pkt_proc_seq_item tr;
     
     `uvm_info("SYNC_RESET_SEQ", "Starting sync reset test sequence", UVM_LOW)
@@ -267,7 +267,7 @@ class dual_reset_test_sequence extends reset_test_sequence_base;
     super.new(name);
   endfunction
 
-  task automatic body();
+  virtual task body();
     pkt_proc_seq_item tr;
     
     `uvm_info("DUAL_RESET_SEQ", "Starting dual reset test sequence", UVM_LOW)
@@ -377,7 +377,7 @@ class reset_during_packet_sequence extends reset_test_sequence_base;
     super.new(name);
   endfunction
 
-  task automatic body();
+  virtual task body();
     pkt_proc_seq_item tr;
     
     `uvm_info("RESET_PACKET_SEQ", "Starting reset during packet test sequence", UVM_LOW)
@@ -489,7 +489,7 @@ class reset_during_read_sequence extends reset_test_sequence_base;
     super.new(name);
   endfunction
 
-  task automatic body();
+  virtual task body();
     pkt_proc_seq_item tr;
     
     `uvm_info("RESET_READ_SEQ", "Starting reset during read test sequence", UVM_LOW)
