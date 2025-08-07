@@ -147,6 +147,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_reference_model(pkt_proc_seq_item tr);
+        // Apply one-cycle delay FIRST (use previous cycle's values for comparison)
+        ref_buffer_empty_delayed = ref_buffer_empty;
+        ref_wr_lvl_delayed = ref_wr_lvl;
+        
         // Update pipeline registers (matching RTL exactly)
         update_pipeline_registers(tr);
         
@@ -170,10 +174,6 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Update write level (current cycle becomes next cycle)
         ref_wr_lvl = ref_wr_lvl_next;
-        
-        // Apply one-cycle delay to match RTL's always_ff behavior
-        ref_buffer_empty_delayed = ref_buffer_empty;
-        ref_wr_lvl_delayed = ref_wr_lvl;
         
         // Update overflow/underflow detection
         update_overflow_underflow(tr);
