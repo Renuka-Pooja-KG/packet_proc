@@ -87,15 +87,28 @@ module tb_top;
   
   // Clock edge monitoring for debugging
   always @(posedge pck_proc_int_mem_fsm_clk) begin
-    if (pkt_proc_if.enq_req) begin
-      $display("Time %0t: Write operation - enq_req=1, in_sop=%0b, in_eop=%0b, wr_data=0x%0h", 
-               $time, pkt_proc_if.in_sop, pkt_proc_if.in_eop, pkt_proc_if.wr_data_i);
+    // Monitor reset signals
+    if (pkt_proc_if.pck_proc_int_mem_fsm_rstn == 0 || pkt_proc_if.pck_proc_int_mem_fsm_sw_rstn == 1) begin
+      $display("Time %0t: RESET ACTIVE - async_rstn=%0b, sync_rstn=%0b", 
+               $time, pkt_proc_if.pck_proc_int_mem_fsm_rstn, pkt_proc_if.pck_proc_int_mem_fsm_sw_rstn);
     end
     
+    // Monitor write operations
+    if (pkt_proc_if.enq_req) begin
+      $display("Time %0t: WRITE - enq_req=1, in_sop=%0b, in_eop=%0b, wr_data=0x%0h, pck_len_valid=%0b, pck_len_i=0x%0h", 
+               $time, pkt_proc_if.in_sop, pkt_proc_if.in_eop, pkt_proc_if.wr_data_i, 
+               pkt_proc_if.pck_len_valid, pkt_proc_if.pck_len_i);
+    end
+    
+    // Monitor read operations
     if (pkt_proc_if.deq_req) begin
-      $display("Time %0t: Read operation - deq_req=1, out_sop=%0b, out_eop=%0b, rd_data=0x%0h", 
+      $display("Time %0t: READ - deq_req=1, out_sop=%0b, out_eop=%0b, rd_data=0x%0h", 
                $time, pkt_proc_if.out_sop, pkt_proc_if.out_eop, pkt_proc_if.rd_data_o);
     end
+    
+    // Monitor DUT internal state
+    $display("Time %0t: DUT_STATE - present_state=%0d, wr_lvl=0x%0h, count_w=0x%0h", 
+             $time, dut.present_state_w, dut.pck_proc_wr_lvl, dut.count_w);
     
     if (pkt_proc_if.pck_proc_overflow) begin
       $display("Time %0t: OVERFLOW detected!", $time);

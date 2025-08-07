@@ -71,10 +71,10 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     `uvm_info("SEQUENCE_BASE", $sformatf("Initializing DUT with %0d reset cycles", reset_cycles), UVM_LOW)
     
     // Phase 1: Apply both resets
-    send_reset_transaction(1'b0, 1'b0, reset_cycles);
+    send_reset_transaction(1'b0, 1'b1, reset_cycles);
     
     // Phase 2: De-assert resets
-    send_reset_transaction(1'b1, 1'b1, 1);
+    send_reset_transaction(1'b1, 1'b0, 1);
     
     // Phase 3: Idle cycles after reset
     send_idle_transaction(idle_cycles);
@@ -97,11 +97,11 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   // Helper task to send idle transactions
   task send_idle_transaction(int cycles);
     repeat(cycles) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_idle");
-      start_item(tr);
-      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
-      tr.empty_de_assert = 1'b0;  // Always disabled
+          tr = pkt_proc_seq_item::type_id::create("tr_idle");
+    start_item(tr);
+    tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+    tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
+    tr.empty_de_assert = 1'b0;  // Always disabled
       tr.enq_req = 1'b0;
       tr.deq_req = 1'b0;
       tr.in_sop = 1'b0;
@@ -138,7 +138,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       tr = pkt_proc_seq_item::type_id::create(tr_name);
       start_item(tr);
       tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
       tr.empty_de_assert = 1'b0;
       tr.enq_req = 1'b1;
       tr.deq_req = 1'b0;
@@ -159,7 +159,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       tr = pkt_proc_seq_item::type_id::create("tr_read");
       start_item(tr);
       tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
       tr.empty_de_assert = 1'b0;
       tr.enq_req = 1'b0;
       tr.deq_req = 1'b1;
@@ -183,7 +183,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       start_item(tr);
       assert(tr.randomize() with {
         pck_proc_int_mem_fsm_rstn == 1'b1;
-        pck_proc_int_mem_fsm_sw_rstn == 1'b1;
+        pck_proc_int_mem_fsm_sw_rstn == 1'b0;
         empty_de_assert == 1'b0;  // Always disabled
         pck_proc_almost_full_value == local::almost_full_value;
         pck_proc_almost_empty_value == local::almost_empty_value;
@@ -202,8 +202,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     `uvm_info(get_type_name(), "Starting reset scenario", UVM_LOW)
     
     // Test different reset combinations
-    send_reset_transaction(1'b0, 1'b0, 3);  // Both resets
-    send_reset_transaction(1'b1, 1'b1, 2);  // Release both
+    send_reset_transaction(1'b0, 1'b1, 3);  // Both resets
+    send_reset_transaction(1'b1, 1'b0, 2);  // Release both
     send_idle_transaction(5);
   endtask
 
@@ -249,7 +249,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       start_item(tr);
       assert(tr.randomize() with {
         pck_proc_int_mem_fsm_rstn == 1'b1;
-        pck_proc_int_mem_fsm_sw_rstn == 1'b1;
+        pck_proc_int_mem_fsm_sw_rstn == 1'b0;
         empty_de_assert == 1'b0;
         pck_proc_almost_full_value == local::almost_full_value;
         pck_proc_almost_empty_value == local::almost_empty_value;
@@ -303,7 +303,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       start_item(tr);
       assert(tr.randomize() with {
         pck_proc_int_mem_fsm_rstn == 1'b1;
-        pck_proc_int_mem_fsm_sw_rstn == 1'b1;
+        pck_proc_int_mem_fsm_sw_rstn == 1'b0;
         empty_de_assert == 1'b0;
         pck_proc_almost_full_value == local::almost_full_value;
         pck_proc_almost_empty_value == local::almost_empty_value;
@@ -342,8 +342,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 1: Clean start - Assert async reset
     `uvm_info(get_type_name(), "Phase 1: Clean start - Asserting async reset", UVM_LOW)
-    send_reset_transaction(1'b0, 1'b1, 5);  // async_rst=0, sync_rst=1 for clean start
-    send_reset_transaction(1'b1, 1'b1, 3);  // Release async reset
+    send_reset_transaction(1'b0, 1'b0, 5);  // async_rst=0, sync_rst=1 for clean start
+    send_reset_transaction(1'b1, 1'b0, 3);  // Release async reset
     
     // Phase 2: Write packets to increment write level
     `uvm_info(get_type_name(), "Phase 2: Writing packets to increment write level", UVM_LOW)
@@ -358,11 +358,11 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 4: Assert async reset while keeping sync reset deasserted
     `uvm_info(get_type_name(), "Phase 4: Asserting async reset (sync reset deasserted)", UVM_LOW)
-    send_reset_transaction(1'b0, 1'b1, 5);  // async_rst=0, sync_rst=1 for 5 cycles
+    send_reset_transaction(1'b0, 1'b0, 5);  // async_rst=0, sync_rst=0 for 5 cycles
     
     // Phase 5: Deassert async reset
     `uvm_info(get_type_name(), "Phase 5: Deasserting async reset", UVM_LOW)
-    send_reset_transaction(1'b1, 1'b1, 3);  // Both resets deasserted
+    send_reset_transaction(1'b1, 1'b0, 3);  // async_rst=1, sync_rst=0
     
     // Phase 6: Write more packets to verify DUT is functional
     `uvm_info(get_type_name(), "Phase 6: Writing packets after async reset", UVM_LOW)
@@ -377,8 +377,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 8: Apply another async reset
     `uvm_info(get_type_name(), "Phase 8: Applying second async reset", UVM_LOW)
-    send_reset_transaction(1'b0, 1'b1, 4);  // async_rst=0, sync_rst=1
-    send_reset_transaction(1'b1, 1'b1, 2);  // Release async reset
+    send_reset_transaction(1'b0, 1'b0, 4);  // async_rst=0, sync_rst=0
+    send_reset_transaction(1'b1, 1'b0, 2);  // Release async reset
     
     // Phase 9: Final write/read sequence
     `uvm_info(get_type_name(), "Phase 9: Final write/read sequence", UVM_LOW)
@@ -394,8 +394,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 1: Clean start - Assert async reset
     `uvm_info(get_type_name(), "Phase 1: Clean start - Asserting async reset", UVM_LOW)
-    send_reset_transaction(1'b0, 1'b1, 5);  // async_rst=0, sync_rst=1 for clean start
-    send_reset_transaction(1'b1, 1'b1, 3);  // Release async reset
+    send_reset_transaction(1'b0, 1'b0, 5);  // async_rst=0, sync_rst=0 for clean start
+    send_reset_transaction(1'b1, 1'b0, 3);  // Release async reset
     
     // Phase 2: Write packets to increment write level
     `uvm_info(get_type_name(), "Phase 2: Writing packets to increment write level", UVM_LOW)
@@ -410,11 +410,11 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 4: Assert sync reset while keeping async reset deasserted
     `uvm_info(get_type_name(), "Phase 4: Asserting sync reset (async reset deasserted)", UVM_LOW)
-    send_reset_transaction(1'b1, 1'b0, 5);  // async_rst=1, sync_rst=0 for 5 cycles
+    send_reset_transaction(1'b1, 1'b1, 5);  // async_rst=1, sync_rst=1 for 5 cycles
     
     // Phase 5: Deassert sync reset
     `uvm_info(get_type_name(), "Phase 5: Deasserting sync reset", UVM_LOW)
-    send_reset_transaction(1'b1, 1'b1, 3);  // Both resets deasserted
+    send_reset_transaction(1'b1, 1'b0, 3);  // async_rst=1, sync_rst=0
     
     // Phase 6: Write more packets to verify DUT is functional
     `uvm_info(get_type_name(), "Phase 6: Writing packets after sync reset", UVM_LOW)
@@ -429,8 +429,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 8: Apply another sync reset
     `uvm_info(get_type_name(), "Phase 8: Applying second sync reset", UVM_LOW)
-    send_reset_transaction(1'b1, 1'b0, 4);  // async_rst=1, sync_rst=0
-    send_reset_transaction(1'b1, 1'b1, 2);  // Release sync reset
+    send_reset_transaction(1'b1, 1'b1, 4);  // async_rst=1, sync_rst=1
+    send_reset_transaction(1'b1, 1'b0, 2);  // Release sync reset
     
     // Phase 9: Final write/read sequence
     `uvm_info(get_type_name(), "Phase 9: Final write/read sequence", UVM_LOW)
@@ -449,8 +449,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     write_packet(8, 32'hF400);
     
     // Assert both resets
-    send_reset_transaction(1'b0, 1'b0, 5);
-    send_reset_transaction(1'b1, 1'b1, 2);
+    send_reset_transaction(1'b0, 1'b1, 5);
+    send_reset_transaction(1'b1, 1'b0, 2);
     
     // Continue operations
     write_packet(6, 32'hF500);
@@ -469,7 +469,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     tr = pkt_proc_seq_item::type_id::create("tr_sop");
     start_item(tr);
     tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-    tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+    tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
     tr.empty_de_assert = 1'b0;
     tr.enq_req = 1'b1;
     tr.deq_req = 1'b0;
@@ -487,7 +487,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       tr = pkt_proc_seq_item::type_id::create($sformatf("tr_data_%0d", i));
       start_item(tr);
       tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
       tr.empty_de_assert = 1'b0;
       tr.enq_req = 1'b1;
       tr.deq_req = 1'b0;
@@ -502,8 +502,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     end
     
     // Apply reset during packet transmission
-    send_reset_transaction(1'b0, 1'b0, 3);
-    send_reset_transaction(1'b1, 1'b1, 2);
+    send_reset_transaction(1'b0, 1'b1, 3);
+    send_reset_transaction(1'b1, 1'b0, 2);
     
     // Try to complete the packet (should be dropped)
     write_packet(6, 32'hF700);
@@ -523,8 +523,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     read_data(3);
     
     // Apply reset during read
-    send_reset_transaction(1'b0, 1'b0, 3);
-    send_reset_transaction(1'b1, 1'b1, 2);
+    send_reset_transaction(1'b0, 1'b1, 3);
+    send_reset_transaction(1'b1, 1'b0, 2);
     
     // Continue reading (should be empty now)
     read_data(5);
