@@ -48,6 +48,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_buffer_empty_r;
     bit ref_wr_en, ref_rd_en;
     
+    // Track actual written data for comparison
+    bit [31:0] ref_last_written_data;
+    bit [11:0] ref_last_written_pck_len;
+    
     // Configuration
     parameter int DEPTH = 16384;
     parameter int PCK_LEN_DEPTH = 32;
@@ -105,6 +109,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_buffer_empty_r = 1;
         ref_wr_en = 0;
         ref_rd_en = 0;
+        ref_last_written_data = 0;
+        ref_last_written_pck_len = 0;
     endfunction
 
     // Simplified transaction handler - no op_type needed!
@@ -130,26 +136,29 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_reference_model(pkt_proc_seq_item tr);
-        // Always update registered signals (matching RTL pipeline)
-        ref_in_sop_r1 = tr.in_sop;
-        ref_in_sop_r = ref_in_sop_r1;
+        // CRITICAL: Update registered signals in the correct order to match RTL pipeline
+        // This order is important - we need to shift the pipeline correctly
+        
+        // First, shift the pipeline (matching RTL behavior)
         ref_in_sop_r2 = ref_in_sop_r;
+        ref_in_sop_r = ref_in_sop_r1;
+        ref_in_sop_r1 = tr.in_sop;
         
-        ref_in_eop_r1 = tr.in_eop;
-        ref_in_eop_r = ref_in_eop_r1;
         ref_in_eop_r2 = ref_in_eop_r;
+        ref_in_eop_r = ref_in_eop_r1;
+        ref_in_eop_r1 = tr.in_eop;
         
-        ref_enq_req_r = tr.enq_req;
         ref_enq_req_r1 = ref_enq_req_r;
+        ref_enq_req_r = tr.enq_req;
         
-        ref_wr_data_r1 = tr.wr_data_i;
         ref_wr_data_r = ref_wr_data_r1;
+        ref_wr_data_r1 = tr.wr_data_i;
         
-        ref_pck_len_valid_r1 = tr.pck_len_valid;
         ref_pck_len_valid_r = ref_pck_len_valid_r1;
+        ref_pck_len_valid_r1 = tr.pck_len_valid;
         
-        ref_pck_len_i_r1 = tr.pck_len_i;
         ref_pck_len_i_r = ref_pck_len_i_r1;
+        ref_pck_len_i_r1 = tr.pck_len_i;
         
         ref_deq_req_r = tr.deq_req;
         
@@ -303,14 +312,23 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Write operations (matching RTL)
         if (ref_wr_en && !ref_buffer_full) begin
             if (write_state == WRITE_HEADER) begin
-                // Write header data
+                // Write header data - use the correct pipelined data
+                // RTL uses wr_data_r1 for header writes
                 ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r1;
                 ref_pck_len_buffer[ref_pck_len_wr_ptr[4:0]] = 
                     (ref_pck_len_valid_r1) ? ref_pck_len_i_r1 : ref_wr_data_r1[11:0];
                 ref_pck_len_wr_ptr = ref_pck_len_wr_ptr + 1;
+                
+                // Track what was actually written
+                ref_last_written_data = ref_wr_data_r1;
+                ref_last_written_pck_len = (ref_pck_len_valid_r1) ? ref_pck_len_i_r1 : ref_wr_data_r1[11:0];
             end else if (write_state == WRITE_DATA) begin
-                // Write data
+                // Write data - use the correct pipelined data
+                // RTL uses wr_data_r1 for data writes
                 ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r1;
+                
+                // Track what was actually written
+                ref_last_written_data = ref_wr_data_r1;
             end
             
             if (write_state == WRITE_HEADER || write_state == WRITE_DATA) begin
@@ -434,6 +452,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Update write level before comparison
         update_write_level();
         
+        // Debug: Log the data pipeline for comparison
+        if (ref_wr_en && !ref_buffer_full) begin
+            `uvm_info("SCOREBOARD_DEBUG", $sformatf("Write Data Pipeline: tr.wr_data_i=0x%0h, ref_wr_data_r1=0x%0h, ref_wr_data_r=0x%0h, written=0x%0h", 
+                      tr.wr_data_i, ref_wr_data_r1, ref_wr_data_r, ref_last_written_data), UVM_LOW)
+        end
+        
         // Compare all outputs with reference model
         if (tr.out_sop !== ref_out_sop) begin
             `uvm_error("SIMPLIFIED_SCOREBOARD", $sformatf("out_sop mismatch: expected=%0b, got=%0b", ref_out_sop, tr.out_sop))
@@ -490,6 +514,16 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         if (tr.pck_proc_wr_lvl !== ref_wr_lvl) begin
             `uvm_error("SIMPLIFIED_SCOREBOARD", $sformatf("pck_proc_wr_lvl mismatch: expected=%0d, got=%0d", ref_wr_lvl, tr.pck_proc_wr_lvl))
             error_count++;
+        end
+        
+        // Additional debug: Compare write data if there's a write operation
+        if (ref_wr_en && !ref_buffer_full) begin
+            // The RTL writes ref_wr_data_r1 to the buffer, so we should compare against that
+            // But we need to account for the pipeline timing
+            if (tr.wr_data_i !== ref_wr_data_r1) begin
+                `uvm_info("SCOREBOARD_DEBUG", $sformatf("Write Data Mismatch: tr.wr_data_i=0x%0h, ref_wr_data_r1=0x%0h (pipeline stage)", 
+                          tr.wr_data_i, ref_wr_data_r1), UVM_LOW)
+            end
         end
     endfunction
 
