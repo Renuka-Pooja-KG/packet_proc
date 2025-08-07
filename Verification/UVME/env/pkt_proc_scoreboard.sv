@@ -43,6 +43,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit [11:0] ref_pck_len_i_r, ref_pck_len_i_r1;
     bit ref_deq_req_r;
     
+    // Additional signals to match RTL behavior
+    bit ref_empty_de_assert;
+    bit ref_buffer_empty_r;
+    bit ref_wr_en, ref_rd_en;
+    
     // Configuration
     parameter int DEPTH = 16384;
     parameter int PCK_LEN_DEPTH = 32;
@@ -94,6 +99,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_len_valid_r = 0; ref_pck_len_valid_r1 = 0;
         ref_pck_len_i_r = 0; ref_pck_len_i_r1 = 0;
         ref_deq_req_r = 0;
+        
+        // Initialize additional signals
+        ref_empty_de_assert = 1;  // Default value
+        ref_buffer_empty_r = 1;
+        ref_wr_en = 0;
+        ref_rd_en = 0;
     endfunction
 
     // Simplified transaction handler - no op_type needed!
@@ -141,6 +152,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_len_i_r = ref_pck_len_i_r1;
         
         ref_deq_req_r = tr.deq_req;
+        
+        // Update empty_de_assert signal
+        ref_empty_de_assert = tr.empty_de_assert;
         
         // Update write FSM if write operation is happening (much simpler!)
         if (tr.enq_req) begin
@@ -270,8 +284,24 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_write_buffer_operations(pkt_proc_seq_item tr);
-        // Write operations
-        if (ref_enq_req_r && !ref_buffer_full && write_state != ERROR) begin
+        // Determine write enable based on RTL logic
+        ref_wr_en = 0;
+        if (write_state == WRITE_HEADER) begin
+            if (ref_packet_drop) begin
+                ref_wr_en = 0;
+            end else if (ref_enq_req_r) begin
+                ref_wr_en = 1;
+            end
+        end else if (write_state == WRITE_DATA) begin
+            if (ref_packet_drop) begin
+                ref_wr_en = 0;
+            end else if (ref_enq_req_r) begin
+                ref_wr_en = 1;
+            end
+        end
+        
+        // Write operations (matching RTL)
+        if (ref_wr_en && !ref_buffer_full) begin
             if (write_state == WRITE_HEADER) begin
                 // Write header data
                 ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r1;
@@ -285,27 +315,36 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             
             if (write_state == WRITE_HEADER || write_state == WRITE_DATA) begin
                 ref_wr_ptr = ref_wr_ptr + 1;
-                ref_wr_lvl = ref_wr_lvl + 1;
                 ref_count_w = ref_count_w + 1;
             end
         end
         
-        // Packet drop handling
+        // Packet drop handling (matching RTL)
         if (ref_packet_drop) begin
             // Rollback write pointer and level
-            ref_wr_ptr = ref_wr_ptr - ref_count_w;
-            ref_wr_lvl = ref_wr_lvl - ref_count_w;
+            if (ref_pck_proc_overflow) begin
+                ref_wr_ptr = ref_wr_ptr - ref_count_w + 1;
+            end else begin
+                ref_wr_ptr = ref_wr_ptr - ref_count_w;
+            end
             ref_count_w = 0;
             ref_packet_drop = 0;
         end
     endfunction
 
     function void update_read_buffer_operations(pkt_proc_seq_item tr);
-        // Read operations
-        if (ref_deq_req_r && !ref_buffer_empty && (read_state == READ_HEADER || read_state == READ_DATA)) begin
+        // Determine read enable based on RTL logic
+        ref_rd_en = 0;
+        if (read_state == READ_HEADER && ref_deq_req_r) begin
+            ref_rd_en = 1;
+        end else if (read_state == READ_DATA && ref_deq_req_r) begin
+            ref_rd_en = 1;
+        end
+        
+        // Read operations (matching RTL)
+        if (ref_rd_en && !ref_buffer_empty) begin
             ref_rd_data_o = ref_buffer[ref_rd_ptr[13:0]];
             ref_rd_ptr = ref_rd_ptr + 1;
-            ref_wr_lvl = ref_wr_lvl - 1;
             ref_count_r = ref_count_r + 1;
             
             if (read_state == READ_HEADER) begin
@@ -329,18 +368,29 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
         end
         
-        // Update almost full/empty
+        // Update almost full/empty (matching RTL logic)
         ref_pck_proc_almost_full = (ref_wr_lvl >= DEPTH - tr.pck_proc_almost_full_value);
         ref_pck_proc_almost_empty = (ref_wr_lvl <= tr.pck_proc_almost_empty_value);
     endfunction
 
     function void update_buffer_full_empty();
         // Buffer full condition (matching RTL logic)
-        ref_buffer_full = (ref_wr_ptr == ref_rd_ptr) ? 0 : 
-                         (({~ref_wr_ptr[14], ref_wr_ptr[13:0]} == ref_rd_ptr) ? 1 : 0);
+        ref_buffer_full = (({~ref_wr_ptr[14], ref_wr_ptr[13:0]} == ref_rd_ptr));
         
         // Buffer empty condition (matching RTL logic)
-        ref_buffer_empty = (ref_wr_ptr == ref_rd_ptr) ? 1 : 0;
+        // This is the complex logic from the RTL
+        if ((ref_empty_de_assert == 0) && (ref_wr_ptr != ref_rd_ptr)) begin
+            ref_buffer_empty = 0;
+        end else if ((ref_in_eop_r2 && (ref_wr_ptr != ref_rd_ptr) && (ref_empty_de_assert == 1))) begin
+            ref_buffer_empty = 0;
+        end else if (ref_wr_ptr == ref_rd_ptr) begin
+            ref_buffer_empty = 1;
+        end else begin
+            ref_buffer_empty = ref_buffer_empty_r;
+        end
+        
+        // Update buffer_empty_r (matching RTL)
+        ref_buffer_empty_r = ref_buffer_empty;
         
         // Packet length buffer conditions
         ref_pck_len_full = (ref_pck_len_wr_ptr == ref_pck_len_rd_ptr) ? 0 :
@@ -349,8 +399,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
     
     function void update_overflow_detection(pkt_proc_seq_item tr);
-        // Overflow detection
-        if (ref_enq_req_r && ref_buffer_full) begin
+        // Overflow detection (matching RTL)
+        if (tr.enq_req && ref_buffer_full) begin
             ref_pck_proc_overflow = 1;
         end else begin
             ref_pck_proc_overflow = 0;
@@ -358,17 +408,32 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_underflow_detection(pkt_proc_seq_item tr);
-        // Underflow detection
-        if (ref_deq_req_r && ref_buffer_empty) begin
+        // Underflow detection (matching RTL)
+        if (tr.deq_req && ref_buffer_empty) begin
             ref_pck_proc_underflow = 1;
         end else begin
             ref_pck_proc_underflow = 0;
         end
     endfunction
 
-    
+    // CRITICAL: Update write level AFTER all other operations (matching RTL)
+    function void update_write_level();
+        // Write level logic (matching RTL exactly)
+        if (ref_packet_drop) begin
+            ref_wr_lvl = ref_wr_lvl - ref_count_w;
+        end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_pck_proc_overflow)) begin
+            ref_wr_lvl = ref_wr_lvl;  // No change
+        end else if (ref_wr_en && !ref_buffer_full) begin
+            ref_wr_lvl = ref_wr_lvl + 1;
+        end else if (ref_rd_en && !ref_buffer_empty) begin
+            ref_wr_lvl = ref_wr_lvl - 1;
+        end
+    endfunction
 
     function void compare_outputs(pkt_proc_seq_item tr);
+        // Update write level before comparison
+        update_write_level();
+        
         // Compare all outputs with reference model
         if (tr.out_sop !== ref_out_sop) begin
             `uvm_error("SIMPLIFIED_SCOREBOARD", $sformatf("out_sop mismatch: expected=%0b, got=%0b", ref_out_sop, tr.out_sop))
