@@ -334,6 +334,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             if (write_state == WRITE_HEADER || write_state == WRITE_DATA) begin
                 ref_wr_ptr = ref_wr_ptr + 1;
                 ref_count_w = ref_count_w + 1;
+                
+                // CRITICAL: Update write level DURING write operations (matching RTL)
+                update_write_level_during_write();
             end
         end
         
@@ -370,6 +373,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 ref_pck_len_rd_ptr = ref_pck_len_rd_ptr + 1;
                 ref_count_r = 0;  // Reset read counter for new packet
             end
+            
+            // CRITICAL: Update write level DURING read operations (matching RTL)
+            update_write_level_during_read();
         end
     endfunction
 
@@ -434,9 +440,34 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
     endfunction
 
-    // CRITICAL: Update write level AFTER all other operations (matching RTL)
+    // CRITICAL: Update write level DURING write operations (matching RTL)
+    function void update_write_level_during_write();
+        // Write level logic for write operations (matching RTL exactly)
+        if (ref_packet_drop) begin
+            ref_wr_lvl = ref_wr_lvl - ref_count_w;
+        end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_pck_proc_overflow)) begin
+            ref_wr_lvl = ref_wr_lvl;  // No change
+        end else if (ref_wr_en && !ref_buffer_full) begin
+            ref_wr_lvl = ref_wr_lvl + 1;
+        end
+    endfunction
+
+    // CRITICAL: Update write level DURING read operations (matching RTL)
+    function void update_write_level_during_read();
+        // Write level logic for read operations (matching RTL exactly)
+        if (ref_packet_drop) begin
+            ref_wr_lvl = ref_wr_lvl - ref_count_w;
+        end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_pck_proc_overflow)) begin
+            ref_wr_lvl = ref_wr_lvl;  // No change
+        end else if (ref_rd_en && !ref_buffer_empty) begin
+            ref_wr_lvl = ref_wr_lvl - 1;
+        end
+    endfunction
+
+    // Legacy function for backward compatibility (but should not be used)
     function void update_write_level();
-        // Write level logic (matching RTL exactly)
+        // This function is deprecated - write level should be updated during operations
+        // But keep it for any existing calls
         if (ref_packet_drop) begin
             ref_wr_lvl = ref_wr_lvl - ref_count_w;
         end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_pck_proc_overflow)) begin
@@ -449,9 +480,6 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void compare_outputs(pkt_proc_seq_item tr);
-        // Update write level before comparison
-        update_write_level();
-        
         // Debug: Log the data pipeline for comparison
         if (ref_wr_en && !ref_buffer_full) begin
             `uvm_info("SCOREBOARD_DEBUG", $sformatf("Write Data Pipeline: tr.wr_data_i=0x%0h, ref_wr_data_r1=0x%0h, ref_wr_data_r=0x%0h, written=0x%0h", 
@@ -513,6 +541,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         if (tr.pck_proc_wr_lvl !== ref_wr_lvl) begin
             `uvm_error("SIMPLIFIED_SCOREBOARD", $sformatf("pck_proc_wr_lvl mismatch: expected=%0d, got=%0d", ref_wr_lvl, tr.pck_proc_wr_lvl))
+            `uvm_info("SCOREBOARD_DEBUG", $sformatf("Write Level Debug: ref_wr_en=%0b, ref_rd_en=%0b, ref_buffer_full=%0b, ref_buffer_empty=%0b, ref_pck_proc_overflow=%0b", 
+                      ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_pck_proc_overflow), UVM_LOW)
             error_count++;
         end
         
