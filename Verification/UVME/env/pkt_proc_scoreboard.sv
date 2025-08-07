@@ -63,6 +63,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit [14:0] ref_wr_lvl_next;     // Next cycle's wr_lvl value
     bit ref_overflow;               // Internal overflow signal (matching int_buffer_top)
     
+    // One-cycle delayed signals (matching RTL's always_ff outputs)
+    bit ref_buffer_empty_delayed;   // One-cycle delayed buffer_empty
+    bit [14:0] ref_wr_lvl_delayed;  // One-cycle delayed wr_lvl
+    
     // Statistics
     int total_transactions = 0;
     int errors = 0;
@@ -124,6 +128,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Initialize write level tracking
         ref_wr_lvl_next = 0;
         ref_overflow = 0;
+        
+        // Initialize delayed signals
+        ref_buffer_empty_delayed = 1;
+        ref_wr_lvl_delayed = 0;
     endfunction
 
     function void write(pkt_proc_seq_item tr);
@@ -148,20 +156,24 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Update read FSM
         update_read_fsm(tr);
         
-        // Update buffer operations
+        // Update buffer operations FIRST (this affects buffer states)
         update_buffer_operations(tr);
         
-        // Update buffer states
+        // Update buffer states based on the operations just performed
         update_buffer_states();
         
-        // Calculate next cycle's write level (matching RTL's always_ff)
+        // NOW calculate next cycle's write level based on CURRENT cycle's buffer states
         update_write_level_next();
         
-        // Update internal overflow signal (matching int_buffer_top)
+        // Update internal overflow signal based on CURRENT cycle's buffer states
         update_internal_overflow();
         
         // Update write level (current cycle becomes next cycle)
         ref_wr_lvl = ref_wr_lvl_next;
+        
+        // Apply one-cycle delay to match RTL's always_ff behavior
+        ref_buffer_empty_delayed = ref_buffer_empty;
+        ref_wr_lvl_delayed = ref_wr_lvl;
         
         // Update overflow/underflow detection
         update_overflow_underflow(tr);
@@ -353,6 +365,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
     function void update_write_level_next();
         // Write level logic (matching RTL's always_ff exactly)
+        // Use previous cycle's buffer states for calculation
         if (ref_packet_drop) begin
             ref_wr_lvl_next = ref_wr_lvl - ref_count_w;
         end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_overflow)) begin
@@ -368,6 +381,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
     function void update_internal_overflow();
         // Internal overflow logic (matching int_buffer_top's always_ff)
+        // Use previous cycle's buffer states for calculation
         if (ref_buffer_full && ref_wr_en) begin
             ref_overflow = 1;
         end else begin
@@ -412,8 +426,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // Almost full/empty conditions
-        ref_pck_proc_almost_full = (ref_wr_lvl >= DEPTH - tr.pck_proc_almost_full_value);
-        ref_pck_proc_almost_empty = (ref_wr_lvl <= tr.pck_proc_almost_empty_value);
+        ref_pck_proc_almost_full = (ref_wr_lvl_delayed >= DEPTH - tr.pck_proc_almost_full_value);
+        ref_pck_proc_almost_empty = (ref_wr_lvl_delayed <= tr.pck_proc_almost_empty_value);
     endfunction
 
     function void compare_outputs(pkt_proc_seq_item tr);
@@ -440,8 +454,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             errors++;
         end
         
-        if (tr.pck_proc_empty !== ref_buffer_empty) begin
-            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_empty mismatch: expected=%0b, got=%0b", ref_buffer_empty, tr.pck_proc_empty))
+        if (tr.pck_proc_empty !== ref_buffer_empty_delayed) begin
+            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_empty mismatch: expected=%0b, got=%0b", ref_buffer_empty_delayed, tr.pck_proc_empty))
             errors++;
         end
         
@@ -470,8 +484,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             errors++;
         end
         
-        if (tr.pck_proc_wr_lvl !== ref_wr_lvl) begin
-            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_wr_lvl mismatch: expected=%0d, got=%0d (wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, overflow=%0b)", ref_wr_lvl, tr.pck_proc_wr_lvl, ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_overflow))
+        if (tr.pck_proc_wr_lvl !== ref_wr_lvl_delayed) begin
+            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_wr_lvl mismatch: expected=%0d, got=%0d (wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, overflow=%0b)", ref_wr_lvl_delayed, tr.pck_proc_wr_lvl, ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_overflow))
             errors++;
         end
     endfunction
