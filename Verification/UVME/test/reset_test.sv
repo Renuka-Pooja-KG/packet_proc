@@ -23,10 +23,10 @@ class reset_test extends uvm_test;
     
     `uvm_info(get_type_name(), "Starting reset test suite", UVM_LOW)
     
-    // Test 1: Basic reset scenario
-    `uvm_info(get_type_name(), "Test 1: Basic reset scenario", UVM_LOW)
-    seq.scenario = 1;  // Reset scenario
-    //seq.num_transactions = 20;
+    // Test 1: Write packets first to build up write level
+    `uvm_info(get_type_name(), "Test 1: Writing packets to build write level", UVM_LOW)
+    seq.scenario = 2;  // Write-only scenario to build write level
+    seq.packet_count = 3;  // Write 3 packets
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 2: Async reset scenario

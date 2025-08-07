@@ -63,6 +63,9 @@ class pkt_proc_seq_item extends uvm_sequence_item;
     
     // When in_sop is high, pck_len_valid should typically be high
     in_sop -> pck_len_valid dist {1 := 80, 0 := 20};
+    
+    // Ensure empty_de_assert is always disabled
+    empty_de_assert == 1'b0;
   }
 
   // Read-specific constraints
