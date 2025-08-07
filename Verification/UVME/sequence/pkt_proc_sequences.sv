@@ -1,6 +1,6 @@
 //=============================================================================
 // File: pkt_proc_sequences.sv
-// Description: Packet Processor UVM Sequences
+// Description: Packet Processor UVM Sequences with Proper Protocol Handling
 // Author: [Your Name]
 // Date: [Date]
 //=============================================================================
@@ -23,11 +23,16 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   int idle_cycles = 3;     // Number of idle cycles after reset
   bit enable_reset = 1;    // Enable/disable reset initialization
   
+  // Fixed configuration values (not randomized per transaction)
+  bit [4:0] almost_full_value = 5'd28;   // Fixed almost full threshold
+  bit [4:0] almost_empty_value = 5'd4;   // Fixed almost empty threshold
+  
   // Packet configuration
   int packet_count = 5;
   int min_packet_length = 4;
   int max_packet_length = 16;
-  int packet_length;
+  int current_packet_length;
+  int current_packet_word_count;
   
   // Transaction handle
   pkt_proc_seq_item tr;
@@ -66,68 +71,138 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     `uvm_info("SEQUENCE_BASE", $sformatf("Initializing DUT with %0d reset cycles", reset_cycles), UVM_LOW)
     
     // Phase 1: Apply both resets
-    tr = pkt_proc_seq_item::type_id::create("tr_reset_init");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 0;  // Assert async reset
-      pck_proc_int_mem_fsm_sw_rstn == 0;  // Assert sync reset
-      enq_req == 0;  // No operations during reset
-      deq_req == 0;
-    });
-    finish_item(tr);
+    send_reset_transaction(1'b0, 1'b0, reset_cycles);
     
-    // Phase 2: Hold reset for specified cycles
-    repeat(reset_cycles - 1) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_reset_hold");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 0;  // Keep async reset asserted
-        pck_proc_int_mem_fsm_sw_rstn == 0;  // Keep sync reset asserted
-        enq_req == 0;  // No operations during reset
-        deq_req == 0;
-      });
-      finish_item(tr);
-    end
+    // Phase 2: De-assert resets
+    send_reset_transaction(1'b1, 1'b1, 1);
     
-    // Phase 3: De-assert resets
-    tr = pkt_proc_seq_item::type_id::create("tr_reset_deassert");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 1;  // De-assert async reset
-      pck_proc_int_mem_fsm_sw_rstn == 1;  // De-assert sync reset
-      enq_req == 0;  // No operations immediately after reset
-      deq_req == 0;
-    });
-    finish_item(tr);
-    
-    // Phase 4: Idle cycles after reset
-    repeat(idle_cycles) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_idle_after_reset");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        enq_req == 0;  // Idle cycles
-        deq_req == 0;
-      });
-      finish_item(tr);
-    end
+    // Phase 3: Idle cycles after reset
+    send_idle_transaction(idle_cycles);
     
     `uvm_info("SEQUENCE_BASE", "DUT initialization completed", UVM_LOW)
   endtask
 
-  // Random scenario
+  // Helper task to send reset transactions
+  task send_reset_transaction(bit async_rstn, bit sync_rstn, int cycles);
+    repeat(cycles) begin
+      tr = pkt_proc_seq_item::type_id::create("tr_reset");
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = async_rstn;
+      tr.pck_proc_int_mem_fsm_sw_rstn = sync_rstn;
+      tr.empty_de_assert = 1'b0;  // Always disabled as requested
+      tr.enq_req = 1'b0;
+      tr.deq_req = 1'b0;
+      tr.in_sop = 1'b0;
+      tr.in_eop = 1'b0;
+      tr.wr_data_i = 32'h0;
+      tr.pck_len_valid = 1'b0;
+      tr.pck_len_i = 12'h0;
+      tr.pck_proc_almost_full_value = almost_full_value;
+      tr.pck_proc_almost_empty_value = almost_empty_value;
+      finish_item(tr);
+    end
+  endtask
+
+  // Helper task to send idle transactions
+  task send_idle_transaction(int cycles);
+    repeat(cycles) begin
+      tr = pkt_proc_seq_item::type_id::create("tr_idle");
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+      tr.empty_de_assert = 1'b0;  // Always disabled
+      tr.enq_req = 1'b0;
+      tr.deq_req = 1'b0;
+      tr.in_sop = 1'b0;
+      tr.in_eop = 1'b0;
+      tr.wr_data_i = 32'h0;
+      tr.pck_len_valid = 1'b0;
+      tr.pck_len_i = 12'h0;
+      tr.pck_proc_almost_full_value = almost_full_value;
+      tr.pck_proc_almost_empty_value = almost_empty_value;
+      finish_item(tr);
+    end
+  endtask
+
+  // Helper task to write a complete packet
+  // This version ensures in_eop is set only on the last word (i == pkt_length-1)
+  // and handles the single-word packet case correctly.
+  task write_packet(int pkt_length, bit [31:0] base_data = 32'hA000);
+    `uvm_info(get_type_name(), $sformatf("Writing packet with length %0d", pkt_length), UVM_MEDIUM)
+
+    if (pkt_length <= 0) begin
+      `uvm_error(get_type_name(), "Packet length must be >= 1")
+      return;
+    end
+
+    for (int i = 0; i < pkt_length; i++) begin
+      string tr_name;
+      if (i == 0)
+        tr_name = "tr_sop";
+      else if (i == pkt_length-1)
+        tr_name = "tr_eop";
+      else
+        tr_name = $sformatf("tr_data_%0d", i);
+
+      tr = pkt_proc_seq_item::type_id::create(tr_name);
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+      tr.empty_de_assert = 1'b0;
+      tr.enq_req = 1'b1;
+      tr.deq_req = 1'b0;
+      tr.in_sop = (i == 0) ? 1'b1 : 1'b0;
+      tr.in_eop = (i == pkt_length-1) ? 1'b1 : 1'b0;
+      tr.wr_data_i = base_data + i;
+      tr.pck_len_valid = (i == 0) ? 1'b1 : 1'b0;
+      tr.pck_len_i = pkt_length[11:0];
+      tr.pck_proc_almost_full_value = almost_full_value;
+      tr.pck_proc_almost_empty_value = almost_empty_value;
+      finish_item(tr);
+    end
+  endtask
+
+  // Helper task to perform read operations
+  task read_data(int read_count);
+    repeat(read_count) begin
+      tr = pkt_proc_seq_item::type_id::create("tr_read");
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+      tr.empty_de_assert = 1'b0;
+      tr.enq_req = 1'b0;
+      tr.deq_req = 1'b1;
+      tr.in_sop = 1'b0;
+      tr.in_eop = 1'b0;
+      tr.wr_data_i = 32'h0;
+      tr.pck_len_valid = 1'b0;
+      tr.pck_len_i = 12'h0;
+      tr.pck_proc_almost_full_value = almost_full_value;
+      tr.pck_proc_almost_empty_value = almost_empty_value;
+      finish_item(tr);
+    end
+  endtask
+
+  // Random scenario with proper constraints
   task random_scenario();
     initialize_dut();
     
     repeat (num_transactions) begin
       tr = pkt_proc_seq_item::type_id::create("tr_random");
-      if (!tr.randomize()) begin
-        `uvm_fatal(get_type_name(), "Failed to randomize transaction")
-      end
       start_item(tr);
+      assert(tr.randomize() with {
+        pck_proc_int_mem_fsm_rstn == 1'b1;
+        pck_proc_int_mem_fsm_sw_rstn == 1'b1;
+        empty_de_assert == 1'b0;  // Always disabled
+        pck_proc_almost_full_value == local::almost_full_value;
+        pck_proc_almost_empty_value == local::almost_empty_value;
+        // Randomize operations but keep protocol valid
+        enq_req dist {1 := 60, 0 := 40};
+        deq_req dist {1 := 40, 0 := 60};
+      });
       finish_item(tr);
-      `uvm_info(get_type_name(), $sformatf("Random: %s", tr.sprint()), UVM_HIGH)
+      `uvm_info(get_type_name(), $sformatf("Random: enq=%0b deq=%0b sop=%0b eop=%0b", 
+                tr.enq_req, tr.deq_req, tr.in_sop, tr.in_eop), UVM_HIGH)
     end
   endtask
 
@@ -135,50 +210,24 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   task reset_scenario();
     `uvm_info(get_type_name(), "Starting reset scenario", UVM_LOW)
     
-    // Hardware reset for specified cycles
-    repeat (reset_cycles) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_reset");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 0;  // Assert async reset
-        pck_proc_int_mem_fsm_sw_rstn == 0;  // Assert sync reset
-        enq_req == 0;  // No operations during reset
-        deq_req == 0;
-      });
-      finish_item(tr);
-      `uvm_info(get_type_name(), $sformatf("Reset: %s", tr.sprint()), UVM_HIGH)
-    end
-    
-    // De-assert reset
-    tr = pkt_proc_seq_item::type_id::create("tr_deassert_reset");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 1;  // De-assert async reset
-      pck_proc_int_mem_fsm_sw_rstn == 1;  // De-assert sync reset
-      enq_req == 0;  // No operations immediately after reset
-      deq_req == 0;
-    });
-    finish_item(tr);
-    `uvm_info(get_type_name(), $sformatf("De-assert Reset: %s", tr.sprint()), UVM_HIGH)
+    // Test different reset combinations
+    send_reset_transaction(1'b0, 1'b0, 3);  // Both resets
+    send_reset_transaction(1'b1, 1'b1, 2);  // Release both
+    send_idle_transaction(5);
   endtask
 
-  // Write-only scenario
+  // Write-only scenario with proper packet structure
   task write_only_scenario();
     initialize_dut();
     
-    `uvm_info(get_type_name(), $sformatf("Starting write-only scenario with %0d writes", num_transactions), UVM_LOW)
+    `uvm_info(get_type_name(), $sformatf("Starting write-only scenario with %0d packets", packet_count), UVM_LOW)
     
-    repeat (num_transactions) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_write");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        enq_req == 1;  // Write operation
-        deq_req == 0;  // No read operation
-      });
-      finish_item(tr);
-      `uvm_info(get_type_name(), $sformatf("Write: %s", tr.sprint()), UVM_HIGH)
+    for (int pkt = 0; pkt < packet_count; pkt++) begin
+      current_packet_length = $urandom_range(min_packet_length, max_packet_length);
+      write_packet(current_packet_length, 32'hA000 + (pkt << 8));
+      
+      // Add some idle cycles between packets
+      send_idle_transaction(2);
     end
   endtask
 
@@ -188,96 +237,52 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     `uvm_info(get_type_name(), $sformatf("Starting read-only scenario with %0d reads", num_transactions), UVM_LOW)
     
-    repeat (num_transactions) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_read");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        deq_req == 1;  // Read operation
-        enq_req == 0;  // No write operation
-      });
-      finish_item(tr);
-      `uvm_info(get_type_name(), $sformatf("Read: %s", tr.sprint()), UVM_HIGH)
-    end
+    read_data(num_transactions);
   endtask
 
   // Concurrent read/write scenario
   task concurrent_rw_scenario();
     initialize_dut();
     
-    `uvm_info(get_type_name(), $sformatf("Starting concurrent R/W scenario with %0d transactions", num_transactions), UVM_LOW)
+    `uvm_info(get_type_name(), $sformatf("Starting concurrent R/W scenario"), UVM_LOW)
     
+    // Write some packets first
+    for (int pkt = 0; pkt < 3; pkt++) begin
+      current_packet_length = $urandom_range(4, 8);
+      write_packet(current_packet_length, 32'hB000 + (pkt << 8));
+    end
+    
+    // Then do concurrent operations
     repeat (num_transactions) begin
       tr = pkt_proc_seq_item::type_id::create("tr_concurrent");
       start_item(tr);
       assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        // Allow both read and write operations naturally
-        enq_req dist {1 := 50, 0 := 50};  // 50% write operations
-        deq_req dist {1 := 50, 0 := 50};  // 50% read operations
-        enq_req || deq_req;  // At least one operation
+        pck_proc_int_mem_fsm_rstn == 1'b1;
+        pck_proc_int_mem_fsm_sw_rstn == 1'b1;
+        empty_de_assert == 1'b0;
+        pck_proc_almost_full_value == local::almost_full_value;
+        pck_proc_almost_empty_value == local::almost_empty_value;
+        enq_req dist {1 := 30, 0 := 70};
+        deq_req dist {1 := 50, 0 := 50};
       });
       finish_item(tr);
-      `uvm_info(get_type_name(), $sformatf("Concurrent: %s", tr.sprint()), UVM_HIGH)
     end
   endtask
 
-    // Packet write scenario
+  // Packet write scenario with structured packets
   task packet_write_scenario();
     initialize_dut();
     
     `uvm_info(get_type_name(), $sformatf("Starting packet write scenario: %0d packets", packet_count), UVM_LOW)
     
     for (int pkt = 0; pkt < packet_count; pkt++) begin
-      // Randomize packet length
-      packet_length = $urandom_range(min_packet_length, max_packet_length);
+      current_packet_length = $urandom_range(min_packet_length, max_packet_length);
+      `uvm_info(get_type_name(), $sformatf("Writing packet %0d with length %0d", pkt, current_packet_length), UVM_LOW)
       
-      `uvm_info(get_type_name(), $sformatf("Writing packet %0d with length %0d", pkt, packet_length), UVM_LOW)
+      write_packet(current_packet_length, 32'hC000 + (pkt << 8));
       
-      // Write packet header (SOP)
-      tr = pkt_proc_seq_item::type_id::create($sformatf("tr_sop_%0d", pkt));
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        enq_req == 1;
-        deq_req == 0;  // No read operation
-        in_sop == 1;
-        in_eop == 0;
-        pck_len_valid == 1;
-        pck_len_i == packet_length;
-      });
-      finish_item(tr);
-      
-      // Write packet data
-      for (int i = 1; i < packet_length - 1; i++) begin
-        tr = pkt_proc_seq_item::type_id::create($sformatf("tr_data_%0d_%0d", pkt, i));
-        start_item(tr);
-        assert(tr.randomize() with {
-          pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-          pck_proc_int_mem_fsm_sw_rstn == 1;
-          enq_req == 1;
-          deq_req == 0;  // No read operation
-          in_sop == 0;
-          in_eop == 0;
-        });
-        finish_item(tr);
-      end
-      
-      // Write packet trailer (EOP)
-      tr = pkt_proc_seq_item::type_id::create($sformatf("tr_eop_%0d", pkt));
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        enq_req == 1;
-        deq_req == 0;  // No read operation
-        in_sop == 0;
-        in_eop == 1;
-      });
-      finish_item(tr);
+      // Add idle cycles between packets
+      send_idle_transaction($urandom_range(1, 3));
     end
   endtask
 
@@ -287,437 +292,253 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     `uvm_info(get_type_name(), $sformatf("Starting continuous read scenario: %0d reads", num_transactions), UVM_LOW)
     
-    repeat (num_transactions) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_cont_read");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        deq_req == 1;  // Read operation
-        enq_req == 0;  // No write operation
-      });
-      finish_item(tr);
-      `uvm_info(get_type_name(), $sformatf("Continuous Read: %s", tr.sprint()), UVM_HIGH)
-    end
+    read_data(num_transactions);
   endtask
 
   // Mixed operations scenario
   task mixed_ops_scenario();
     initialize_dut();
     
-    `uvm_info(get_type_name(), $sformatf("Starting mixed operations scenario: %0d transactions", num_transactions), UVM_LOW)
+    `uvm_info(get_type_name(), $sformatf("Starting mixed operations scenario"), UVM_LOW)
     
+    // Write some packets
+    for (int pkt = 0; pkt < 2; pkt++) begin
+      write_packet($urandom_range(4, 8), 32'hD000 + (pkt << 8));
+    end
+    
+    // Mixed read/write operations
     repeat (num_transactions) begin
       tr = pkt_proc_seq_item::type_id::create("tr_mixed");
       start_item(tr);
       assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        // Allow both read and write operations naturally
-        enq_req dist {1 := 40, 0 := 60};  // 40% write operations
-        deq_req dist {1 := 40, 0 := 60};  // 40% read operations
+        pck_proc_int_mem_fsm_rstn == 1'b1;
+        pck_proc_int_mem_fsm_sw_rstn == 1'b1;
+        empty_de_assert == 1'b0;
+        pck_proc_almost_full_value == local::almost_full_value;
+        pck_proc_almost_empty_value == local::almost_empty_value;
+        enq_req dist {1 := 40, 0 := 60};
+        deq_req dist {1 := 40, 0 := 60};
       });
       finish_item(tr);
-      `uvm_info(get_type_name(), $sformatf("Mixed: %s", tr.sprint()), UVM_HIGH)
     end
   endtask
 
-  // Overflow scenario
+  // Overflow scenario - try to fill the buffer
   task overflow_scenario();
     initialize_dut();
     
-    `uvm_info(get_type_name(), $sformatf("Starting overflow scenario: %0d writes", num_transactions), UVM_LOW)
+    `uvm_info(get_type_name(), $sformatf("Starting overflow scenario"), UVM_LOW)
     
-    // Try to write continuously to cause overflow
-    repeat (num_transactions) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_overflow");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        enq_req == 1;  // Write operation
-        deq_req == 0;  // No read operation
-        in_sop dist {1 := 20, 0 := 80};  // 20% SOP, 80% data
-        in_eop dist {1 := 20, 0 := 80};  // 20% EOP, 80% data
-      });
-      finish_item(tr);
-      `uvm_info(get_type_name(), $sformatf("Overflow: %s", tr.sprint()), UVM_HIGH)
+    // Write many packets to cause overflow
+    for (int pkt = 0; pkt < 50; pkt++) begin
+      write_packet(4, 32'hE000 + pkt);  // Small packets to write many
     end
   endtask
 
-  // Underflow scenario
+  // Underflow scenario - try to read from empty buffer
   task underflow_scenario();
     initialize_dut();
     
-    `uvm_info(get_type_name(), $sformatf("Starting underflow scenario: %0d reads", num_transactions), UVM_LOW)
+    `uvm_info(get_type_name(), $sformatf("Starting underflow scenario"), UVM_LOW)
     
-    // Try to read continuously to cause underflow
-    repeat (num_transactions) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_underflow");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        deq_req == 1;  // Read operation
-        enq_req == 0;  // No write operation
-      });
-      finish_item(tr);
-      `uvm_info(get_type_name(), $sformatf("Underflow: %s", tr.sprint()), UVM_HIGH)
-    end
+    // Try to read from empty buffer
+    read_data(num_transactions);
   endtask
 
-  // Async reset scenario
+  // Async reset scenario with write/read level verification
   task async_reset_scenario();
-    `uvm_info(get_type_name(), "Starting async reset scenario", UVM_LOW)
+    `uvm_info(get_type_name(), "Starting async reset scenario with level verification", UVM_LOW)
     
-    // Phase 1: Normal operations
-    repeat (10) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_normal");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // No async reset
-        pck_proc_int_mem_fsm_sw_rstn == 1;  // No sync reset
-        enq_req == 1;
-        deq_req == 0;
-      });
-      finish_item(tr);
+    // Phase 1: Clean start - Assert async reset
+    `uvm_info(get_type_name(), "Phase 1: Clean start - Asserting async reset", UVM_LOW)
+    send_reset_transaction(1'b0, 1'b1, 5);  // async_rst=0, sync_rst=1 for clean start
+    send_reset_transaction(1'b1, 1'b1, 3);  // Release async reset
+    
+    // Phase 2: Write packets to increment write level
+    `uvm_info(get_type_name(), "Phase 2: Writing packets to increment write level", UVM_LOW)
+    for (int pkt = 0; pkt < 5; pkt++) begin
+      write_packet($urandom_range(4, 8), 32'hA000 + (pkt << 8));
+      send_idle_transaction(1);  // Small gap between packets
     end
     
-    // Phase 2: Assert async reset
-    tr = pkt_proc_seq_item::type_id::create("tr_async_reset");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 0;  // Assert async reset
-      enq_req == 1;  // Continue operations during reset
-      deq_req == 1;
-    });
-    finish_item(tr);
+    // Phase 3: Read some data to increment read level
+    `uvm_info(get_type_name(), "Phase 3: Reading data to increment read level", UVM_LOW)
+    read_data(10);
     
-    // Phase 3: Continue operations during reset
-    repeat (5) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_during_reset");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 0;  // Keep reset asserted
-        enq_req dist {1 := 60, 0 := 40};
-        deq_req dist {1 := 60, 0 := 40};
-      });
-      finish_item(tr);
+    // Phase 4: Assert async reset while keeping sync reset deasserted
+    `uvm_info(get_type_name(), "Phase 4: Asserting async reset (sync reset deasserted)", UVM_LOW)
+    send_reset_transaction(1'b0, 1'b1, 5);  // async_rst=0, sync_rst=1 for 5 cycles
+    
+    // Phase 5: Deassert async reset
+    `uvm_info(get_type_name(), "Phase 5: Deasserting async reset", UVM_LOW)
+    send_reset_transaction(1'b1, 1'b1, 3);  // Both resets deasserted
+    
+    // Phase 6: Write more packets to verify DUT is functional
+    `uvm_info(get_type_name(), "Phase 6: Writing packets after async reset", UVM_LOW)
+    for (int pkt = 0; pkt < 3; pkt++) begin
+      write_packet($urandom_range(4, 6), 32'hB000 + (pkt << 8));
+      send_idle_transaction(1);
     end
     
-    // Phase 4: De-assert reset
-    tr = pkt_proc_seq_item::type_id::create("tr_deassert_reset");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 1;  // De-assert async reset
-      enq_req == 1;
-      deq_req == 0;
-    });
-    finish_item(tr);
+    // Phase 7: Read data to verify read functionality
+    `uvm_info(get_type_name(), "Phase 7: Reading data after async reset", UVM_LOW)
+    read_data(8);
     
-    // Phase 5: Post-reset operations
-    repeat (15) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_post_reset");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep reset de-asserted
-        enq_req dist {1 := 50, 0 := 50};
-        deq_req dist {1 := 50, 0 := 50};
-        enq_req || deq_req;  // At least one operation
-      });
-      finish_item(tr);
-    end
+    // Phase 8: Apply another async reset
+    `uvm_info(get_type_name(), "Phase 8: Applying second async reset", UVM_LOW)
+    send_reset_transaction(1'b0, 1'b1, 4);  // async_rst=0, sync_rst=1
+    send_reset_transaction(1'b1, 1'b1, 2);  // Release async reset
+    
+    // Phase 9: Final write/read sequence
+    `uvm_info(get_type_name(), "Phase 9: Final write/read sequence", UVM_LOW)
+    write_packet(6, 32'hC000);
+    read_data(5);
+    
+    `uvm_info(get_type_name(), "Async reset scenario completed", UVM_LOW)
   endtask
 
-  // Sync reset scenario
+  // Sync reset scenario with write/read level verification
   task sync_reset_scenario();
-    `uvm_info(get_type_name(), "Starting sync reset scenario", UVM_LOW)
+    `uvm_info(get_type_name(), "Starting sync reset scenario with level verification", UVM_LOW)
     
-    // Phase 1: Normal operations
-    repeat (8) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_normal");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_sw_rstn == 1;  // No sync reset
-        enq_req == 1;
-        deq_req == 0;
-      });
-      finish_item(tr);
+    // Phase 1: Clean start - Assert async reset
+    `uvm_info(get_type_name(), "Phase 1: Clean start - Asserting async reset", UVM_LOW)
+    send_reset_transaction(1'b0, 1'b1, 5);  // async_rst=0, sync_rst=1 for clean start
+    send_reset_transaction(1'b1, 1'b1, 3);  // Release async reset
+    
+    // Phase 2: Write packets to increment write level
+    `uvm_info(get_type_name(), "Phase 2: Writing packets to increment write level", UVM_LOW)
+    for (int pkt = 0; pkt < 5; pkt++) begin
+      write_packet($urandom_range(4, 8), 32'hD000 + (pkt << 8));
+      send_idle_transaction(1);  // Small gap between packets
     end
     
-    // Phase 2: Assert sync reset
-    tr = pkt_proc_seq_item::type_id::create("tr_sync_reset");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_sw_rstn == 0;  // Assert sync reset
-      enq_req == 1;  // Continue operations during reset
-      deq_req == 1;
-    });
-    finish_item(tr);
+    // Phase 3: Read some data to increment read level
+    `uvm_info(get_type_name(), "Phase 3: Reading data to increment read level", UVM_LOW)
+    read_data(10);
     
-    // Phase 3: Operations during sync reset
-    repeat (6) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_during_sync_reset");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_sw_rstn == 0;  // Keep sync reset asserted
-        enq_req dist {1 := 70, 0 := 30};
-        deq_req dist {1 := 70, 0 := 30};
-      });
-      finish_item(tr);
+    // Phase 4: Assert sync reset while keeping async reset deasserted
+    `uvm_info(get_type_name(), "Phase 4: Asserting sync reset (async reset deasserted)", UVM_LOW)
+    send_reset_transaction(1'b1, 1'b0, 5);  // async_rst=1, sync_rst=0 for 5 cycles
+    
+    // Phase 5: Deassert sync reset
+    `uvm_info(get_type_name(), "Phase 5: Deasserting sync reset", UVM_LOW)
+    send_reset_transaction(1'b1, 1'b1, 3);  // Both resets deasserted
+    
+    // Phase 6: Write more packets to verify DUT is functional
+    `uvm_info(get_type_name(), "Phase 6: Writing packets after sync reset", UVM_LOW)
+    for (int pkt = 0; pkt < 3; pkt++) begin
+      write_packet($urandom_range(4, 6), 32'hE000 + (pkt << 8));
+      send_idle_transaction(1);
     end
     
-    // Phase 4: De-assert sync reset
-    tr = pkt_proc_seq_item::type_id::create("tr_deassert_sync_reset");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_sw_rstn == 1;  // De-assert sync reset
-      enq_req == 1;
-      deq_req == 0;
-    });
-    finish_item(tr);
+    // Phase 7: Read data to verify read functionality
+    `uvm_info(get_type_name(), "Phase 7: Reading data after sync reset", UVM_LOW)
+    read_data(8);
     
-    // Phase 5: Post-sync-reset operations
-    repeat (12) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_post_sync_reset");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_sw_rstn == 1;  // Keep sync reset de-asserted
-        enq_req dist {1 := 50, 0 := 50};
-        deq_req dist {1 := 50, 0 := 50};
-        enq_req || deq_req;  // At least one operation
-      });
-      finish_item(tr);
-    end
+    // Phase 8: Apply another sync reset
+    `uvm_info(get_type_name(), "Phase 8: Applying second sync reset", UVM_LOW)
+    send_reset_transaction(1'b1, 1'b0, 4);  // async_rst=1, sync_rst=0
+    send_reset_transaction(1'b1, 1'b1, 2);  // Release sync reset
+    
+    // Phase 9: Final write/read sequence
+    `uvm_info(get_type_name(), "Phase 9: Final write/read sequence", UVM_LOW)
+    write_packet(6, 32'hF000);
+    read_data(5);
+    
+    `uvm_info(get_type_name(), "Sync reset scenario completed", UVM_LOW)
   endtask
 
   // Dual reset scenario
   task dual_reset_scenario();
     `uvm_info(get_type_name(), "Starting dual reset scenario", UVM_LOW)
     
-    // Phase 1: Normal operations
-    repeat (6) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_normal");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // No async reset
-        pck_proc_int_mem_fsm_sw_rstn == 1;  // No sync reset
-        enq_req == 1;
-        deq_req == 0;
-      });
-      finish_item(tr);
-    end
+    // Normal operations
+    initialize_dut();
+    write_packet(8, 32'hF400);
     
-    // Phase 2: Assert both resets
-    tr = pkt_proc_seq_item::type_id::create("tr_dual_reset");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 0;  // Assert async reset
-      pck_proc_int_mem_fsm_sw_rstn == 0;  // Assert sync reset
-      enq_req == 1;  // Continue operations during reset
-      deq_req == 1;
-    });
-    finish_item(tr);
+    // Assert both resets
+    send_reset_transaction(1'b0, 1'b0, 5);
+    send_reset_transaction(1'b1, 1'b1, 2);
     
-    // Phase 3: Operations during dual reset
-    repeat (8) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_during_dual_reset");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 0;  // Keep async reset asserted
-        pck_proc_int_mem_fsm_sw_rstn == 0;  // Keep sync reset asserted
-        enq_req dist {1 := 50, 0 := 50};
-        deq_req dist {1 := 50, 0 := 50};
-      });
-      finish_item(tr);
-    end
-    
-    // Phase 4: De-assert both resets
-    tr = pkt_proc_seq_item::type_id::create("tr_deassert_dual_reset");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 1;  // De-assert async reset
-      pck_proc_int_mem_fsm_sw_rstn == 1;  // De-assert sync reset
-      enq_req == 1;
-      deq_req == 0;
-    });
-    finish_item(tr);
-    
-    // Phase 5: Post-dual-reset operations
-    repeat (10) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_post_dual_reset");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;  // Keep resets de-asserted
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        enq_req dist {1 := 50, 0 := 50};
-        deq_req dist {1 := 50, 0 := 50};
-        enq_req || deq_req;  // At least one operation
-      });
-      finish_item(tr);
-    end
+    // Continue operations
+    write_packet(6, 32'hF500);
   endtask
 
   // Reset during packet scenario
   task reset_during_packet_scenario();
     `uvm_info(get_type_name(), "Starting reset during packet scenario", UVM_LOW)
     
-    // Phase 1: Start packet transmission
-    // Packet header
-    tr = pkt_proc_seq_item::type_id::create("tr_packet_header");
+    initialize_dut();
+    
+    // Start writing a packet
+    current_packet_length = 8;
+    
+    // Write SOP
+    tr = pkt_proc_seq_item::type_id::create("tr_sop");
     start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 1;
-      pck_proc_int_mem_fsm_sw_rstn == 1;
-      enq_req == 1;
-      deq_req == 0;
-      in_sop == 1;
-      in_eop == 0;
-      pck_len_valid == 1;
-      pck_len_i == 8;  // 8-word packet
-    });
+    tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+    tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+    tr.empty_de_assert = 1'b0;
+    tr.enq_req = 1'b1;
+    tr.deq_req = 1'b0;
+    tr.in_sop = 1'b1;
+    tr.in_eop = 1'b0;
+    tr.wr_data_i = 32'hF600;
+    tr.pck_len_valid = 1'b1;
+    tr.pck_len_i = current_packet_length[11:0];
+    tr.pck_proc_almost_full_value = almost_full_value;
+    tr.pck_proc_almost_empty_value = almost_empty_value;
     finish_item(tr);
     
-    // Packet data (first few words)
+    // Write a few data words
     for (int i = 1; i < 4; i++) begin
-      tr = pkt_proc_seq_item::type_id::create($sformatf("tr_packet_data_%0d", i));
+      tr = pkt_proc_seq_item::type_id::create($sformatf("tr_data_%0d", i));
       start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        enq_req == 1;
-        deq_req == 0;
-        in_sop == 0;
-        in_eop == 0;
-        wr_data_i == 32'hA000 + i;  // Unique data pattern
-      });
+      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+      tr.empty_de_assert = 1'b0;
+      tr.enq_req = 1'b1;
+      tr.deq_req = 1'b0;
+      tr.in_sop = 1'b0;
+      tr.in_eop = 1'b0;
+      tr.wr_data_i = 32'hF600 + i;
+      tr.pck_len_valid = 1'b0;
+      tr.pck_len_i = current_packet_length[11:0];
+      tr.pck_proc_almost_full_value = almost_full_value;
+      tr.pck_proc_almost_empty_value = almost_empty_value;
       finish_item(tr);
     end
     
-    // Phase 2: Assert reset during packet transmission
-    tr = pkt_proc_seq_item::type_id::create("tr_reset_during_packet");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 0;  // Assert async reset
-      pck_proc_int_mem_fsm_sw_rstn == 0;  // Assert sync reset
-      enq_req == 1;  // Continue packet transmission
-      deq_req == 0;
-      in_sop == 0;
-      in_eop == 0;
-      wr_data_i == 32'hB000;  // Data during reset
-    });
-    finish_item(tr);
+    // Apply reset during packet transmission
+    send_reset_transaction(1'b0, 1'b0, 3);
+    send_reset_transaction(1'b1, 1'b1, 2);
     
-    // Phase 3: Continue packet during reset
-    for (int i = 4; i < 7; i++) begin
-      tr = pkt_proc_seq_item::type_id::create($sformatf("tr_packet_during_reset_%0d", i));
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 0;
-        pck_proc_int_mem_fsm_sw_rstn == 0;
-        enq_req == 1;
-        deq_req == 0;
-        in_sop == 0;
-        in_eop == 0;
-        wr_data_i == 32'hC000 + i;
-      });
-      finish_item(tr);
-    end
-    
-    // Phase 4: De-assert reset and complete packet
-    tr = pkt_proc_seq_item::type_id::create("tr_complete_packet");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 1;  // De-assert async reset
-      pck_proc_int_mem_fsm_sw_rstn == 1;  // De-assert sync reset
-      enq_req == 1;
-      deq_req == 0;
-      in_sop == 0;
-      in_eop == 1;  // End of packet
-    });
-    finish_item(tr);
+    // Try to complete the packet (should be dropped)
+    write_packet(6, 32'hF700);
   endtask
 
   // Reset during read scenario
   task reset_during_read_scenario();
     `uvm_info(get_type_name(), "Starting reset during read scenario", UVM_LOW)
     
-    // Phase 1: Write some data first
-    repeat (5) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_write");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        enq_req == 1;
-        deq_req == 0;
-      });
-      finish_item(tr);
-    end
+    initialize_dut();
     
-    // Phase 2: Start read operations
-    repeat (3) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_read_start");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        enq_req == 0;
-        deq_req == 1;  // Read operations
-      });
-      finish_item(tr);
-    end
+    // Write some data first
+    write_packet(8, 32'hF800);
+    write_packet(6, 32'hF900);
     
-    // Phase 3: Assert reset during read
-    tr = pkt_proc_seq_item::type_id::create("tr_reset_during_read");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 0;  // Assert async reset
-      pck_proc_int_mem_fsm_sw_rstn == 0;  // Assert sync reset
-      enq_req == 0;
-      deq_req == 1;  // Continue read during reset
-    });
-    finish_item(tr);
+    // Start reading
+    read_data(3);
     
-    // Phase 4: Continue read during reset
-    repeat (4) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_read_during_reset");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 0;
-        pck_proc_int_mem_fsm_sw_rstn == 0;
-        enq_req == 0;
-        deq_req == 1;  // Read operations during reset
-      });
-      finish_item(tr);
-    end
+    // Apply reset during read
+    send_reset_transaction(1'b0, 1'b0, 3);
+    send_reset_transaction(1'b1, 1'b1, 2);
     
-    // Phase 5: De-assert reset
-    tr = pkt_proc_seq_item::type_id::create("tr_deassert_reset_read");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 1;  // De-assert async reset
-      pck_proc_int_mem_fsm_sw_rstn == 1;  // De-assert sync reset
-      enq_req == 0;
-      deq_req == 1;  // Continue read after reset
-    });
-    finish_item(tr);
-    
-    // Phase 6: Mixed operations after reset
-    repeat (8) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_mixed_after_reset");
-      start_item(tr);
-      assert(tr.randomize() with {
-        pck_proc_int_mem_fsm_rstn == 1;
-        pck_proc_int_mem_fsm_sw_rstn == 1;
-        enq_req dist {1 := 50, 0 := 50};
-        deq_req dist {1 := 50, 0 := 50};
-        enq_req || deq_req;  // At least one operation
-      });
-      finish_item(tr);
-    end
+    // Continue reading (should be empty now)
+    read_data(5);
   endtask
 
-endclass 
+endclass
 
-`endif // PKT_PROC_SEQUENCES_SV 
+`endif // PKT_PROC_SEQUENCES_SV
