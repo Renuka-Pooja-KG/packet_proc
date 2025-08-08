@@ -556,17 +556,17 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
         // pck_proc_full (from buffer_full) - matching RTL assign
-        ref_pck_proc_full = (({~ref_wr_ptr[14], ref_wr_ptr[13:0]} == ref_rd_ptr));
+        ref_buffer_full = (({~ref_wr_ptr[14], ref_wr_ptr[13:0]} == ref_rd_ptr));
         
         // pck_proc_empty (from buffer_empty) - matching RTL assign
         if ((ref_empty_de_assert == 0) && (ref_wr_ptr != ref_rd_ptr)) begin
-            ref_pck_proc_empty = 0;
+            ref_buffer_empty = 0;
         end else if ((ref_in_eop_r2 && (ref_wr_ptr != ref_rd_ptr) && (ref_empty_de_assert == 1))) begin
-            ref_pck_proc_empty = 0;
+            ref_buffer_empty = 0;
         end else if (ref_wr_ptr == ref_rd_ptr) begin
-            ref_pck_proc_empty = 1;
+            ref_buffer_empty = 1;
         end else begin
-            ref_pck_proc_empty = ref_buffer_empty_r;
+            ref_buffer_empty = ref_buffer_empty_r;
         end
         
         // pck_proc_almost_full (from almost_full) - matching RTL always_comb
@@ -605,8 +605,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
         end
         
-        if (tr.pck_proc_full !== ref_pck_proc_full) begin
-            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_full mismatch: expected=%0b, got=%0b", ref_pck_proc_full, tr.pck_proc_full))
+        if (tr.pck_proc_full !== ref_buffer_full) begin
+            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_full mismatch: expected=%0b, got=%0b", ref_buffer_full, tr.pck_proc_full))
             errors++;
         end
         
