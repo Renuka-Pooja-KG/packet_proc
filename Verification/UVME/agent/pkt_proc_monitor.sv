@@ -22,6 +22,7 @@ class pkt_proc_monitor extends uvm_monitor;
     `uvm_info(get_type_name(), "Pkt_proc Monitor run phase started", UVM_LOW)
     
     forever begin
+      // Wait for clock edge to synchronize, then capture immediately
       @(posedge vif.pck_proc_int_mem_fsm_clk);
       
       // Capture reset signals
@@ -49,11 +50,11 @@ class pkt_proc_monitor extends uvm_monitor;
       tr.rd_data_o = vif.monitor_cb.rd_data_o;
       tr.out_eop = vif.monitor_cb.out_eop;
       
-      // Capture status signals
-      tr.pck_proc_full = vif.monitor_cb.pck_proc_full;
-      tr.pck_proc_empty = vif.monitor_cb.pck_proc_empty;
-      tr.pck_proc_almost_full = vif.monitor_cb.pck_proc_almost_full;
-      tr.pck_proc_almost_empty = vif.monitor_cb.pck_proc_almost_empty;
+      // Capture status signals - these are combinational, so capture directly from interface
+      tr.pck_proc_full = vif.pck_proc_full;
+      tr.pck_proc_empty = vif.pck_proc_empty;
+      tr.pck_proc_almost_full = vif.pck_proc_almost_full;
+      tr.pck_proc_almost_empty = vif.pck_proc_almost_empty;
       tr.pck_proc_overflow = vif.monitor_cb.pck_proc_overflow;
       tr.pck_proc_underflow = vif.monitor_cb.pck_proc_underflow;
       tr.packet_drop = vif.monitor_cb.packet_drop;
