@@ -41,7 +41,7 @@ class pkt_proc_seq_item extends uvm_sequence_item;
   bit pck_proc_overflow;
   bit pck_proc_underflow;
   bit packet_drop;
-  bit [13:0] pck_proc_wr_lvl;
+  bit [14:0] pck_proc_wr_lvl;
 
 //   // Operation type control
 //   typedef enum {WRITE_OP, READ_OP, BOTH_OP} operation_type_e;

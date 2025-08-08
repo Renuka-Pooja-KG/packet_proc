@@ -31,7 +31,7 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
 
   logic packet_drop; //Packet drop
 
-  logic [13:0] pck_proc_wr_lvl; //Packet write level
+  logic [14:0] pck_proc_wr_lvl; //Packet write level
   
   //Clocking block to the driver
   //Driving inputs to the DUT at negative edge of the clock as the RTL is written in posedge
