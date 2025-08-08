@@ -66,6 +66,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     // One-cycle delayed signals (matching RTL's always_ff outputs)
     bit ref_buffer_empty_delayed;   // One-cycle delayed buffer_empty
     
+    // Temporary variables for combinational calculations
+    bit temp_full, temp_empty;
+    
     // Statistics
     int total_transactions = 0;
     int errors = 0;
@@ -130,6 +133,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Initialize delayed signals
         ref_buffer_empty_delayed = 1;
+        
+        // Initialize temporary variables
+        temp_full = 0;
+        temp_empty = 0;
     endfunction
 
     function void write(pkt_proc_seq_item tr);
@@ -563,7 +570,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // pck_proc_almost_full (from almost_full) - matching RTL always_comb
-        bit temp_full = (ref_wr_lvl >= DEPTH - tr.pck_proc_almost_full_value);
+        temp_full = (ref_wr_lvl >= DEPTH - tr.pck_proc_almost_full_value);
         if (temp_full) begin
             ref_pck_proc_almost_full = 1;
         end else begin
@@ -571,7 +578,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // pck_proc_almost_empty (from almost_empty) - matching RTL always_comb
-        bit temp_empty = (ref_wr_lvl <= tr.pck_proc_almost_empty_value);
+        temp_empty = (ref_wr_lvl <= tr.pck_proc_almost_empty_value);
         if (temp_empty) begin
             ref_pck_proc_almost_empty = 1;
         end else begin
