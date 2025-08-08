@@ -148,6 +148,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Apply one-cycle delay FIRST (use previous cycle's values for comparison)
         ref_buffer_empty_delayed = ref_buffer_empty;
         
+        // Handle reset logic FIRST (matching RTL behavior)
+        handle_reset_logic(tr);
+        
         // Update pipeline registers (matching RTL exactly)
         update_pipeline_registers(tr);
         
@@ -157,26 +160,139 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Update read FSM
         update_read_fsm(tr);
         
-        // Update buffer operations FIRST (this affects buffer states)
-        update_buffer_operations(tr);
+        // Generate write/read enables FIRST (matching RTL order)
+        generate_write_read_enables(tr);
         
-        // Update buffer states based on the operations just performed
-        update_buffer_states();
-        
-        // NOW calculate next cycle's write level based on CURRENT cycle's buffer states
+        // Update write level based on current enables (matching RTL order)
         update_write_level_next();
         
-        // Update internal overflow signal based on CURRENT cycle's buffer states
+        // Update internal overflow signal
         update_internal_overflow();
         
         // Update write level (current cycle becomes next cycle)
         ref_wr_lvl = ref_wr_lvl_next;
+        
+        // NOW perform buffer operations (after wr_lvl calculation)
+        update_buffer_operations(tr);
+        
+        // Update buffer states based on the operations just performed
+        update_buffer_states();
         
         // Update overflow/underflow detection
         update_overflow_underflow(tr);
         
         // Update outputs
         update_outputs(tr);
+    endfunction
+
+    function void handle_reset_logic(pkt_proc_seq_item tr);
+        // Asynchronous active-low reset (highest priority)
+        if (!tr.pck_proc_int_mem_fsm_rstn) begin
+            // Reset all state machines and registers
+            write_state = IDLE_W;
+            read_state = IDLE_R;
+            
+            // Reset pointers and counters
+            ref_wr_ptr = 0;
+            ref_rd_ptr = 0;
+            ref_pck_len_wr_ptr = 0;
+            ref_pck_len_rd_ptr = 0;
+            ref_wr_lvl = 0;
+            ref_count_w = 0;
+            ref_count_r = 0;
+            ref_packet_length = 0;
+            
+            // Reset buffer states
+            //ref_buffer_full = 0;
+            //ref_buffer_empty = 1;
+            ref_pck_len_full = 0;
+            ref_pck_len_empty = 1;
+            
+            // Reset flags
+            ref_pck_proc_overflow = 0;
+            ref_pck_proc_underflow = 0;
+            ref_packet_drop = 0;
+            ref_overflow = 0;
+            
+            // Reset outputs
+            ref_out_sop = 0;
+            ref_out_eop = 0;
+            ref_rd_data_o = 0;
+            //ref_pck_proc_almost_full = 0;
+            //ref_pck_proc_almost_empty = 0;
+            
+            // Reset pipeline registers
+            ref_in_sop_r = 0; ref_in_sop_r1 = 0; ref_in_sop_r2 = 0;
+            ref_in_eop_r = 0; ref_in_eop_r1 = 0; ref_in_eop_r2 = 0;
+            ref_enq_req_r = 0; ref_enq_req_r1 = 0;
+            ref_wr_data_r = 0; ref_wr_data_r1 = 0;
+            ref_pck_len_valid_r = 0; ref_pck_len_valid_r1 = 0;
+            ref_pck_len_i_r = 0; ref_pck_len_i_r1 = 0;
+            ref_deq_req_r = 0;
+            
+            // Reset additional signals
+            ref_empty_de_assert = 0;
+            ref_buffer_empty_r = 1;
+            ref_wr_en = 0;
+            ref_rd_en = 0;
+            ref_wr_lvl_next = 0;
+            
+            return; // Exit early - no further processing during reset
+        end
+        
+        // Synchronous active-high software reset (second priority)
+        if (tr.pck_proc_int_mem_fsm_sw_rstn) begin
+            // Reset all state machines and registers
+            write_state = IDLE_W;
+            read_state = IDLE_R;
+            
+            // Reset pointers and counters
+            ref_wr_ptr = 0;
+            ref_rd_ptr = 0;
+            ref_pck_len_wr_ptr = 0;
+            ref_pck_len_rd_ptr = 0;
+            ref_wr_lvl = 0;
+            ref_count_w = 0;
+            ref_count_r = 0;
+            ref_packet_length = 0;
+            
+            // Reset buffer states
+            //ref_buffer_full = 0;
+            //ref_buffer_empty = 1;
+            ref_pck_len_full = 0;
+            ref_pck_len_empty = 1;
+            
+            // Reset flags
+            ref_pck_proc_overflow = 0;
+            ref_pck_proc_underflow = 0;
+            ref_packet_drop = 0;
+            ref_overflow = 0;
+            
+            // Reset outputs
+            ref_out_sop = 0;
+            ref_out_eop = 0;
+            ref_rd_data_o = 0;
+            //ref_pck_proc_almost_full = 0;
+            //ref_pck_proc_almost_empty = 0;
+            
+            // Reset pipeline registers
+            ref_in_sop_r = 0; ref_in_sop_r1 = 0; ref_in_sop_r2 = 0;
+            ref_in_eop_r = 0; ref_in_eop_r1 = 0; ref_in_eop_r2 = 0;
+            ref_enq_req_r = 0; ref_enq_req_r1 = 0;
+            ref_wr_data_r = 0; ref_wr_data_r1 = 0;
+            ref_pck_len_valid_r = 0; ref_pck_len_valid_r1 = 0;
+            ref_pck_len_i_r = 0; ref_pck_len_i_r1 = 0;
+            ref_deq_req_r = 0;
+            
+            // Reset additional signals
+            ref_empty_de_assert = 0;
+            ref_buffer_empty_r = 1;
+            ref_wr_en = 0;
+            ref_rd_en = 0;
+            ref_wr_lvl_next = 0;
+            
+            return; // Exit early - no further processing during reset
+        end
     endfunction
 
     function void update_pipeline_registers(pkt_proc_seq_item tr);
@@ -277,8 +393,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         return 0;
     endfunction
 
-    function void update_buffer_operations(pkt_proc_seq_item tr);
-        // Determine write enable
+    function void generate_write_read_enables(pkt_proc_seq_item tr);
+        // Determine write enable (matching RTL logic)
         ref_wr_en = 0;
         if (write_state == WRITE_HEADER && ref_enq_req_r && !ref_packet_drop) begin
             ref_wr_en = 1;
@@ -286,13 +402,18 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_wr_en = 1;
         end
         
-        // Determine read enable
+        // Determine read enable (matching RTL logic)
         ref_rd_en = 0;
         if (read_state == READ_HEADER && ref_deq_req_r) begin
             ref_rd_en = 1;
         end else if (read_state == READ_DATA && ref_deq_req_r) begin
             ref_rd_en = 1;
         end
+    endfunction
+
+    function void update_buffer_operations(pkt_proc_seq_item tr);
+        // Write/read enables are already calculated in generate_write_read_enables()
+        // No need to recalculate them here
         
         // Write operations
         if (ref_wr_en && !ref_buffer_full) begin
@@ -362,7 +483,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
     function void update_write_level_next();
         // Write level logic (matching RTL's always_ff exactly)
-        // Use previous cycle's buffer states for calculation
+        // Use current cycle's write/read enables (matching RTL order)
         if (ref_packet_drop) begin
             ref_wr_lvl_next = ref_wr_lvl - ref_count_w;
         end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_overflow)) begin
@@ -422,9 +543,40 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
         end
         
-        // Almost full/empty conditions
-        ref_pck_proc_almost_full = (ref_wr_lvl >= DEPTH - tr.pck_proc_almost_full_value);
-        ref_pck_proc_almost_empty = (ref_wr_lvl <= tr.pck_proc_almost_empty_value);
+        // Combinational output signals (matching RTL exactly)
+        update_combinational_outputs(tr);
+    endfunction
+
+    function void update_combinational_outputs(pkt_proc_seq_item tr);
+        // pck_proc_full (from buffer_full) - matching RTL assign
+        ref_pck_proc_full = (({~ref_wr_ptr[14], ref_wr_ptr[13:0]} == ref_rd_ptr));
+        
+        // pck_proc_empty (from buffer_empty) - matching RTL assign
+        if ((ref_empty_de_assert == 0) && (ref_wr_ptr != ref_rd_ptr)) begin
+            ref_pck_proc_empty = 0;
+        end else if ((ref_in_eop_r2 && (ref_wr_ptr != ref_rd_ptr) && (ref_empty_de_assert == 1))) begin
+            ref_pck_proc_empty = 0;
+        end else if (ref_wr_ptr == ref_rd_ptr) begin
+            ref_pck_proc_empty = 1;
+        end else begin
+            ref_pck_proc_empty = ref_buffer_empty_r;
+        end
+        
+        // pck_proc_almost_full (from almost_full) - matching RTL always_comb
+        bit temp_full = (ref_wr_lvl >= DEPTH - tr.pck_proc_almost_full_value);
+        if (temp_full) begin
+            ref_pck_proc_almost_full = 1;
+        end else begin
+            ref_pck_proc_almost_full = 0;
+        end
+        
+        // pck_proc_almost_empty (from almost_empty) - matching RTL always_comb
+        bit temp_empty = (ref_wr_lvl <= tr.pck_proc_almost_empty_value);
+        if (temp_empty) begin
+            ref_pck_proc_almost_empty = 1;
+        end else begin
+            ref_pck_proc_almost_empty = 0;
+        end
     endfunction
 
     function void compare_outputs(pkt_proc_seq_item tr);
@@ -446,8 +598,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
         end
         
-        if (tr.pck_proc_full !== ref_buffer_full) begin
-            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_full mismatch: expected=%0b, got=%0b", ref_buffer_full, tr.pck_proc_full))
+        if (tr.pck_proc_full !== ref_pck_proc_full) begin
+            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_full mismatch: expected=%0b, got=%0b", ref_pck_proc_full, tr.pck_proc_full))
             errors++;
         end
         
