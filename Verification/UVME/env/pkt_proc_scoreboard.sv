@@ -63,6 +63,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_rd_en_prev;  // Previous cycle's read enable
     bit [31:0] ref_rd_data_delayed;  // Delayed read data output
     bit ref_deq_req_prev;  // Previous cycle's dequeue request (for out_sop timing)
+    bit ref_deq_req_prev2;  // Two cycles ago dequeue request (for out_sop timing)
     
     // Write level tracking (matching RTL's always_ff behavior)
     bit [14:0] ref_wr_lvl_next;     // Next cycle's wr_lvl value (15 bits: [ADDR_WIDTH:0])
@@ -134,6 +135,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_rd_en_prev = 0;
         ref_rd_data_delayed = 0;
         ref_deq_req_prev = 0;
+        ref_deq_req_prev2 = 0;
         
         // Initialize write level tracking
         ref_wr_lvl_next = 0;
@@ -202,6 +204,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Update read enable pipeline
         ref_rd_en_prev = ref_rd_en;
+        ref_deq_req_prev2 = ref_deq_req_prev;
         ref_deq_req_prev = ref_deq_req_r;
         
         // Update outputs
@@ -510,14 +513,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
     function void update_write_level_next();
         // Write level logic (matching RTL's always_ff exactly)
-        // Use current cycle's write/read enables (matching RTL order)
+        // Use previous cycle's write/read enables to match DUT timing
         if (ref_packet_drop) begin
             ref_wr_lvl_next = ref_wr_lvl - ref_count_w;
-        end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_overflow)) begin
+        end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en_prev && !ref_buffer_empty) && (!ref_overflow)) begin
             ref_wr_lvl_next = ref_wr_lvl;  // No change
         end else if (ref_wr_en && !ref_buffer_full) begin
             ref_wr_lvl_next = ref_wr_lvl + 1;
-        end else if (ref_rd_en && !ref_buffer_empty) begin
+        end else if (ref_rd_en_prev && !ref_buffer_empty) begin
             ref_wr_lvl_next = ref_wr_lvl - 1;
         end else begin
             ref_wr_lvl_next = ref_wr_lvl;  // No change
@@ -560,9 +563,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_out_sop = 0;
         ref_out_eop = 0;
         
-        if (read_state == READ_HEADER && ref_deq_req_prev) begin
+        if (read_state == READ_HEADER && ref_deq_req_prev2) begin
             ref_out_sop = 1;
-        end else if (read_state == READ_DATA && ref_deq_req_prev) begin
+        end else if (read_state == READ_DATA && ref_deq_req_prev2) begin
             if (ref_count_r == (ref_packet_length - 1)) begin
                 ref_out_eop = 1;
                 // Reset read counter when out_eop is generated (matching RTL)
@@ -574,8 +577,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         update_combinational_outputs(tr);
         
         // Debug out_sop calculation
-        `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop calc: read_state=%0d, deq_req_prev=%0b, out_sop=%0b", 
-                 read_state, ref_deq_req_prev, ref_out_sop), UVM_LOW)
+        `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop calc: read_state=%0d, deq_req_prev2=%0b, out_sop=%0b", 
+                 read_state, ref_deq_req_prev2, ref_out_sop), UVM_LOW)
     endfunction
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
