@@ -54,7 +54,7 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
     input rd_data_o;
     input out_eop;
     input pck_proc_full;
-    input pck_proc_empty;
+    input pck_proc_empty;›
     input pck_proc_almost_full;
     input pck_proc_almost_empty;
     input pck_proc_overflow;

@@ -64,7 +64,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_overflow;               // Internal overflow signal (matching int_buffer_top)
     
     // One-cycle delayed signals (matching RTL's always_ff outputs)
-    //bit ref_buffer_empty_delayed;   // One-cycle delayed buffer_empty
+    bit ref_buffer_empty_delayed;   // One-cycle delayed buffer_empty
     
     // Statistics
     int total_transactions = 0;
@@ -129,7 +129,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_overflow = 0;
         
         // Initialize delayed signals
-        //ref_buffer_empty_delayed = 1;
+        ref_buffer_empty_delayed = 1;
     endfunction
 
     function void write(pkt_proc_seq_item tr);
@@ -146,7 +146,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
     function void update_reference_model(pkt_proc_seq_item tr);
         // Apply one-cycle delay FIRST (use previous cycle's values for comparison)
-        //ref_buffer_empty_delayed = ref_buffer_empty;
+        ref_buffer_empty_delayed = ref_buffer_empty;
         
         // Update pipeline registers (matching RTL exactly)
         update_pipeline_registers(tr);
@@ -451,8 +451,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             errors++;
         end
         
-        if (tr.pck_proc_empty !== ref_buffer_empty) begin
-            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_empty mismatch: expected=%0b, got=%0b", ref_buffer_empty, tr.pck_proc_empty))
+        if (tr.pck_proc_empty !== ref_buffer_empty_delayed) begin
+            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_empty mismatch: expected=%0b, got=%0b", ref_buffer_empty_delayed, tr.pck_proc_empty))
             errors++;
         end
         
