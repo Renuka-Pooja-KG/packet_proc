@@ -59,6 +59,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_buffer_empty_r;
     bit ref_wr_en, ref_rd_en;
     
+    // Read pipeline delay (matching DUT timing)
+    bit ref_rd_en_prev;  // Previous cycle's read enable
+    bit [31:0] ref_rd_data_delayed;  // Delayed read data output
+    
     // Write level tracking (matching RTL's always_ff behavior)
     bit [14:0] ref_wr_lvl_next;     // Next cycle's wr_lvl value (15 bits: [ADDR_WIDTH:0])
     bit ref_overflow;               // Internal overflow signal (matching int_buffer_top)
@@ -126,6 +130,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_buffer_empty_r = 1;
         ref_wr_en = 0;
         ref_rd_en = 0;
+        ref_rd_en_prev = 0;
+        ref_rd_data_delayed = 0;
         
         // Initialize write level tracking
         ref_wr_lvl_next = 0;
@@ -187,6 +193,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Update overflow/underflow detection
         update_overflow_underflow(tr);
+        
+        // Update read enable pipeline
+        ref_rd_en_prev = ref_rd_en;
         
         // Update outputs
         update_outputs(tr);
@@ -439,9 +448,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
         end
         
-        // Read operations
-        if (ref_rd_en && !ref_buffer_empty) begin
-            ref_rd_data_o = ref_buffer[ref_rd_ptr[13:0]];
+        // Read operations with one-cycle delay (matching DUT pipeline)
+        if (ref_rd_en_prev && !ref_buffer_empty) begin
+            ref_rd_data_delayed = ref_buffer[ref_rd_ptr[13:0]];
             ref_rd_ptr = ref_rd_ptr + 1;
             ref_count_r = ref_count_r + 1;
             
@@ -593,7 +602,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     function void compare_outputs(pkt_proc_seq_item tr);
         // Debug information
         `uvm_info("SCOREBOARD_DEBUG", $sformatf("Time=%0d: DUT wr_lvl=%0d, ref_wr_lvl=%0d, DUT_empty=%0b, ref_empty=%0b, DUT_rd_data=0x%0h, ref_rd_data=0x%0h", 
-                 $time, tr.pck_proc_wr_lvl, ref_wr_lvl, tr.pck_proc_empty, ref_buffer_empty, tr.rd_data_o, ref_rd_data_o), UVM_LOW)
+                 $time, tr.pck_proc_wr_lvl, ref_wr_lvl, tr.pck_proc_empty, ref_buffer_empty, tr.rd_data_o, ref_rd_data_delayed), UVM_LOW)
         
         // Compare all outputs with reference model
         if (tr.out_sop !== ref_out_sop) begin
@@ -607,8 +616,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         if (tr.deq_req && !ref_buffer_empty) begin
-            if (tr.rd_data_o !== ref_rd_data_o) begin
-                `uvm_error("SCOREBOARD_NEW", $sformatf("rd_data_o mismatch: expected=0x%0h, got=0x%0h", ref_rd_data_o, tr.rd_data_o))
+            if (tr.rd_data_o !== ref_rd_data_delayed) begin
+                `uvm_error("SCOREBOARD_NEW", $sformatf("rd_data_o mismatch: expected=0x%0h, got=0x%0h", ref_rd_data_delayed, tr.rd_data_o))
                 errors++;
             end
         end
