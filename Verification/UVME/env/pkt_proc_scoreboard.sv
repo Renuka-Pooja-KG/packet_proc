@@ -605,14 +605,20 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Packet drop detection & debug
         if (is_packet_invalid(tr)) begin
             if (!ref_packet_drop) begin
-                `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP detected. Reasons: in_sop=%0b, in_eop=%0b, in_sop_r=%0b, in_sop_r1=%0b, early_eop=%0b, late_eop=%0b, overflow=%0b, pck_len_valid=%0b, pck_len_i=%0d",
-                         $time,
-                         tr.in_sop, tr.in_eop,
-                         ref_in_sop_r, ref_in_sop_r1,
-                         (ref_in_eop_r1 && (ref_count_w < ref_packet_length - 1) && (ref_packet_length != 0)),
-                         (!ref_in_eop_r1 && (ref_count_w == ref_packet_length - 1) && (write_state == WRITE_DATA)),
-                         ref_pck_proc_overflow,
-                         tr.pck_len_valid, tr.pck_len_i), UVM_LOW)
+                // Recompute condition flags for detailed debug
+                bit dbg_cond1, dbg_cond3, dbg_cond4, dbg_cond5, dbg_cond6;
+                dbg_cond1 = (tr.in_sop && tr.in_eop);
+                dbg_cond3 = (ref_in_sop_r1 && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+                dbg_cond4 = ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
+                dbg_cond5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+                dbg_cond6 = (ref_pck_proc_overflow);
+                `uvm_info("PKT_DROP_DEBUG", $sformatf(
+                    "Time=%0t: PACKET_DROP detected. enq_req=%0b | cond1=%0b cond3=%0b cond4=%0b cond5=%0b cond6=%0b | in_sop=%0b in_eop=%0b in_sop_r=%0b in_sop_r1=%0b in_eop_r1=%0b | state=%0d count_w=%0d pck_len_w=%0d overflow=%0b",
+                    $time,
+                    tr.enq_req,
+                    dbg_cond1, dbg_cond3, dbg_cond4, dbg_cond5, dbg_cond6,
+                    tr.in_sop, tr.in_eop, ref_in_sop_r, ref_in_sop_r1, ref_in_eop_r1,
+                    write_state, ref_count_w, ref_packet_length_w, ref_pck_proc_overflow), UVM_LOW)
             end
             ref_packet_drop = 1;
         end else begin
