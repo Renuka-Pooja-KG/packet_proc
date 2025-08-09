@@ -36,7 +36,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit [14:0] ref_pck_len_wr_ptr, ref_pck_len_rd_ptr;
     bit [14:0] ref_wr_lvl;
     bit [11:0] ref_count_w, ref_count_r;
-    bit [11:0] ref_packet_length;
+    bit [11:0] ref_packet_length;      // read-path packet length (used by read FSM)
+    bit [11:0] ref_packet_length_w;    // write-path packet length (used for pck_invalid)
     bit ref_buffer_full, ref_buffer_empty;
     bit ref_pck_len_full, ref_pck_len_empty;
     bit ref_pck_proc_overflow, ref_pck_proc_underflow;
@@ -109,6 +110,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_count_w = 0;
         ref_count_r = 0;
         ref_packet_length = 0;
+        ref_packet_length_w = 0;
         
         // Initialize buffer states
         ref_buffer_full = 0;
@@ -252,6 +254,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_count_w = 0;
             ref_count_r = 0;
             ref_packet_length = 0;
+            ref_packet_length_w = 0;
             
             // Reset buffer states
             //ref_buffer_full = 0;
@@ -307,6 +310,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_count_w = 0;
             ref_count_r = 0;
             ref_packet_length = 0;
+            ref_packet_length_w = 0;
             
             // Reset buffer states
             //ref_buffer_full = 0;
@@ -454,12 +458,13 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             `uvm_info("PKT_DROP_DEBUG", $sformatf("SOP during data:  DUT in_sop = %0b, write_state = %0d, ref in_eop_r1 = %0b", tr.in_sop, write_state, ref_in_eop_r1), UVM_LOW); 
             return 1; 
         end
-        if (ref_in_eop_r1 && (ref_count_w < ref_packet_length - 1) && (ref_packet_length != 0)) begin 
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Early EOP: ref in_eop_r1 = %0b, ref count_w = %0d, ref packet_length = %0d", ref_in_eop_r1, ref_count_w, ref_packet_length), UVM_LOW) 
+        // Use write-path packet length for write-side validity checks
+        if (ref_in_eop_r1 && (ref_count_w < ref_packet_length_w - 1) && (ref_packet_length_w != 0)) begin 
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Early EOP: ref in_eop_r1 = %0b, ref count_w = %0d, ref packet_length_w = %0d", ref_in_eop_r1, ref_count_w, ref_packet_length_w), UVM_LOW) 
             return 1; 
         end
-        if (!ref_in_eop_r1 && ((ref_count_w == ref_packet_length - 1) || (ref_packet_length == 0)) && (write_state == WRITE_DATA)) begin 
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Late EOP: ref in_eop_r1 = %0b, ref count_w = %0d, ref packet_length = %0d, write_state = %0d", ref_in_eop_r1, ref_count_w, ref_packet_length, write_state), UVM_LOW) 
+        if (!ref_in_eop_r1 && ((ref_count_w == ref_packet_length_w - 1) || (ref_packet_length_w == 0)) && (write_state == WRITE_DATA)) begin 
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Late EOP: ref in_eop_r1 = %0b, ref count_w = %0d, ref packet_length_w = %0d, write_state = %0d", ref_in_eop_r1, ref_count_w, ref_packet_length_w, write_state), UVM_LOW) 
             return 1; 
         end
         if (ref_pck_proc_overflow) begin 
@@ -502,6 +507,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 ref_pck_len_buffer[ref_pck_len_wr_ptr[4:0]] = 
                     (ref_pck_len_valid_r1) ? ref_pck_len_i_r1 : ref_wr_data_r1[11:0];
                 ref_pck_len_wr_ptr = ref_pck_len_wr_ptr + 1;
+                // Update write-path packet length mirror (used in scoreboard pck_invalid checks)
+                ref_packet_length_w = (ref_pck_len_valid_r1) ? ref_pck_len_i_r1 : ref_wr_data_r1[11:0];
             end else if (write_state == WRITE_DATA) begin
                 ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r1;
             end
