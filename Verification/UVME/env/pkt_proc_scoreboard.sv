@@ -41,6 +41,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_pck_len_full, ref_pck_len_empty;
     bit ref_pck_proc_overflow, ref_pck_proc_underflow;
     bit ref_packet_drop;
+    bit ref_packet_drop_prev;  // track rising edge of packet_drop for debug
     
     // Expected outputs
     bit ref_out_sop, ref_out_eop;
@@ -119,6 +120,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_proc_overflow = 0;
         ref_pck_proc_underflow = 0;
         ref_packet_drop = 0;
+        ref_packet_drop_prev = 0;
         
         // Initialize outputs
         ref_out_sop = 0;
@@ -261,6 +263,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_proc_overflow = 0;
             ref_pck_proc_underflow = 0;
             ref_packet_drop = 0;
+            ref_packet_drop_prev = 0;
             ref_overflow = 0;
             
             // Reset outputs
@@ -315,6 +318,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_proc_overflow = 0;
             ref_pck_proc_underflow = 0;
             ref_packet_drop = 0;
+            ref_packet_drop_prev = 0;
             ref_overflow = 0;
             
             // Reset outputs
@@ -438,13 +442,34 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
     function bit is_packet_invalid(pkt_proc_seq_item tr);
         // Invalid packet conditions (matching RTL)
-        if (tr.in_sop && tr.in_eop) return 1;  // SOP and EOP together
-        if (ref_in_sop_r && ref_in_sop_r1) return 1;  // Back-to-back SOP
-        if (tr.in_sop && (write_state == WRITE_DATA) && !ref_in_eop_r1) return 1;  // SOP during data
-        if (ref_in_eop_r1 && (ref_count_w < ref_packet_length - 1) && (ref_packet_length != 0)) return 1;  // Early EOP
-        if (!ref_in_eop_r1 && (ref_count_w == ref_packet_length - 1) && (write_state == WRITE_DATA)) return 1;  // Late EOP
-        if (ref_pck_proc_overflow) return 1;  // Overflow condition
-        if (tr.pck_len_valid && (tr.pck_len_i <= 1)) return 1;  // Invalid packet length
+        if (tr.in_sop && tr.in_eop) begin
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: Invalid packet: SOP and EOP asserted together", $time), UVM_LOW)
+            return 1;
+        end
+        if (ref_in_sop_r && ref_in_sop_r1)  begin
+            `uvm_info("PKT_DROP_DEBUG", "Back-to-back SOP", UVM_LOW)
+            return 1;
+        end
+        if (tr.in_sop && (write_state == WRITE_DATA) && !ref_in_eop_r1) begin 
+            `uvm_info("PKT_DROP_DEBUG", "SOP during data", UVM_LOW); 
+            return 1; 
+        end
+        if (ref_in_eop_r1 && (ref_count_w < ref_packet_length - 1) && (ref_packet_length != 0)) begin 
+            `uvm_info("PKT_DROP_DEBUG", "Early EOP", UVM_LOW) 
+            return 1; 
+        end
+        if (!ref_in_eop_r1 && (ref_count_w == ref_packet_length - 1) && (write_state == WRITE_DATA)) begin 
+            `uvm_info("PKT_DROP_DEBUG", "Late EOP", UVM_LOW) 
+            return 1; 
+        end
+        if (ref_pck_proc_overflow) begin 
+            `uvm_info("PKT_DROP_DEBUG", "Overflow condition", UVM_LOW) 
+            return 1; 
+        end
+        if (tr.pck_len_valid && (tr.pck_len_i <= 1)) begin 
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Invalid pck_len: %0d", tr.pck_len_i), UVM_LOW) 
+            return 1; 
+        end
         return 0;
     endfunction
 
@@ -502,6 +527,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Packet drop handling
         if (ref_packet_drop) begin
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP asserted. overflow=%0b, count_w=%0d, wr_ptr(before)=%0d",
+                     $time, ref_pck_proc_overflow, ref_count_w, ref_wr_ptr), UVM_LOW)
             if (ref_pck_proc_overflow) begin
                 ref_wr_ptr = ref_wr_ptr - ref_count_w + 1;
             end else begin
@@ -509,6 +536,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
             ref_count_w = 0;
             ref_packet_drop = 0;
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP applied. wr_ptr(after)=%0d, wr_lvl=%0d",
+                     $time, ref_wr_ptr, ref_wr_lvl), UVM_LOW)
         end
     endfunction
 
@@ -581,9 +610,21 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_proc_underflow = 0;
         end
         
-        // Packet drop detection
+        // Packet drop detection & debug
         if (is_packet_invalid(tr)) begin
+            if (!ref_packet_drop) begin
+                `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP detected. Reasons: in_sop=%0b, in_eop=%0b, in_sop_r=%0b, in_sop_r1=%0b, early_eop=%0b, late_eop=%0b, overflow=%0b, pck_len_valid=%0b, pck_len_i=%0d",
+                         $time,
+                         tr.in_sop, tr.in_eop,
+                         ref_in_sop_r, ref_in_sop_r1,
+                         (ref_in_eop_r1 && (ref_count_w < ref_packet_length - 1) && (ref_packet_length != 0)),
+                         (!ref_in_eop_r1 && (ref_count_w == ref_packet_length - 1) && (write_state == WRITE_DATA)),
+                         ref_pck_proc_overflow,
+                         tr.pck_len_valid, tr.pck_len_i), UVM_LOW)
+            end
             ref_packet_drop = 1;
+        end else begin
+            ref_packet_drop_prev = ref_packet_drop;
         end
     endfunction
 
