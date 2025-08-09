@@ -448,7 +448,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Mirror RTL pck_invalid: (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) && enq_req
         bit cond1, cond3, cond4, cond5, cond6;
         cond1 = (tr.in_sop && tr.in_eop);
-        cond3 = (tr.in_sop && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+        //cond3 = (tr.in_sop && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+        cond3 = (ref_in_sop_r1 && ~ref_in_eop_r1 && (write_state == WRITE_DATA));
         // Use WRITE-PATH packet length for these checks
         cond4 = ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
         cond5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
