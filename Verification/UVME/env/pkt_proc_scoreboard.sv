@@ -25,7 +25,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     typedef enum {IDLE_R, READ_HEADER, READ_DATA} read_state_e;
     
     write_state_e write_state;
+    write_state_e write_state_next; // next-state mirror for write FSM
     read_state_e read_state;
+    read_state_e read_state_next; // mirror RTL present/next state split
     
     // Reference model internal state
     bit [31:0] ref_buffer[0:16383];  // Main buffer
@@ -52,22 +54,27 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit [31:0] ref_wr_data_r, ref_wr_data_r1;
     bit ref_pck_len_valid_r, ref_pck_len_valid_r1;
     bit [11:0] ref_pck_len_i_r, ref_pck_len_i_r1;
-    bit ref_deq_req_r;
+    bit ref_deq_req_r;   // registered deq_req (1-cycle delayed)
+    bit ref_deq_req_r1;  // sampling stage for deq_req
     
     // Additional signals
     bit ref_empty_de_assert;
     bit ref_buffer_empty_r;
     bit ref_wr_en, ref_rd_en;
+    bit ref_wr_en_prev;  // Previous cycle's write enable
     
     // Read pipeline delay (matching DUT timing)
     bit ref_rd_en_prev;  // Previous cycle's read enable
     bit [31:0] ref_rd_data_delayed;  // Delayed read data output
     bit ref_deq_req_prev;  // Previous cycle's dequeue request (for out_sop timing)
     bit ref_deq_req_prev2;  // Two cycles ago dequeue request (for out_sop timing)
+    bit ref_buffer_full_prev;   // Previous cycle's buffer_full
+    bit ref_buffer_empty_prev;  // Previous cycle's buffer_empty
     
     // Write level tracking (matching RTL's always_ff behavior)
     bit [14:0] ref_wr_lvl_next;     // Next cycle's wr_lvl value (15 bits: [ADDR_WIDTH:0])
     bit ref_overflow;               // Internal overflow signal (matching int_buffer_top)
+    bit ref_overflow_prev;          // Previous cycle's overflow
     
     // One-cycle delayed signals (matching RTL's always_ff outputs)
     bit ref_buffer_empty_delayed;   // One-cycle delayed buffer_empty
@@ -88,7 +95,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     function void initialize_reference_model();
         // Initialize state machines
         write_state = IDLE_W;
+        write_state_next = IDLE_W;
         read_state = IDLE_R;
+        read_state_next = IDLE_R;
         
         // Initialize pointers and counters
         ref_wr_ptr = 0;
@@ -126,20 +135,25 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_len_valid_r = 0; ref_pck_len_valid_r1 = 0;
         ref_pck_len_i_r = 0; ref_pck_len_i_r1 = 0;
         ref_deq_req_r = 0;
+        ref_deq_req_r1 = 0;
         
         // Initialize additional signals
         ref_empty_de_assert = 1;
         ref_buffer_empty_r = 1;
         ref_wr_en = 0;
         ref_rd_en = 0;
+        ref_wr_en_prev = 0;
         ref_rd_en_prev = 0;
         ref_rd_data_delayed = 0;
         ref_deq_req_prev = 0;
         ref_deq_req_prev2 = 0;
+        ref_buffer_full_prev = 0;
+        ref_buffer_empty_prev = 1;
         
         // Initialize write level tracking
         ref_wr_lvl_next = 0;
         ref_overflow = 0;
+        ref_overflow_prev = 0;
         
         // Initialize delayed signals
         ref_buffer_empty_delayed = 1;
@@ -171,11 +185,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Update pipeline registers (matching RTL exactly)
         update_pipeline_registers(tr);
         
-        // Update write FSM
-        update_write_fsm(tr);
-        
-        // Update read FSM
-        update_read_fsm(tr);
+        // Compute write next-state (mirror RTL always_comb); advance at end of cycle
+        compute_write_next_state(tr);
+
+        // Compute read next-state from present state and registered inputs (like RTL always_comb);
+        // advance at end of cycle after outputs are derived from present state
+        compute_read_next_state(tr);
         
         // Generate write/read enables FIRST (matching RTL order)
         generate_write_read_enables(tr);
@@ -186,7 +201,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Update internal overflow signal
         update_internal_overflow();
         
-        // Update write level (current cycle becomes next cycle)
+        // Update write level (registered output computed from prior-cycle enables/states)
         ref_wr_lvl = ref_wr_lvl_next;
         
         // Debug wr_lvl calculation
@@ -202,13 +217,21 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Update overflow/underflow detection
         update_overflow_underflow(tr);
         
-        // Update read enable pipeline
+        // Update previous-cycle trackers for next computation
         ref_rd_en_prev = ref_rd_en;
+        ref_wr_en_prev = ref_wr_en;
+        ref_buffer_full_prev  = ref_buffer_full;
+        ref_buffer_empty_prev = ref_buffer_empty;
+        ref_overflow_prev = ref_overflow;
         ref_deq_req_prev2 = ref_deq_req_prev;
         ref_deq_req_prev = ref_deq_req_r;
         
-        // Update outputs
+        // Update outputs (depend on PRESENT state)
         update_outputs(tr);
+
+        // Advance PRESENT states to NEXT after outputs (mirror RTL clocked state update)
+        write_state = write_state_next;
+        read_state  = read_state_next;
     endfunction
 
     function void handle_reset_logic(pkt_proc_seq_item tr);
@@ -343,65 +366,71 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_len_i_r = ref_pck_len_i_r1;
         ref_pck_len_i_r1 = tr.pck_len_i;
         
-        ref_deq_req_r = tr.deq_req;
+        // Model RTL register on deq_req: stage and then register
+        ref_deq_req_r1 = tr.deq_req;  // sample input
+        ref_deq_req_r  = ref_deq_req_r1; // registered output (1-cycle delayed)
         ref_empty_de_assert = tr.empty_de_assert;
     endfunction
 
-    function void update_write_fsm(pkt_proc_seq_item tr);
-        case (write_state)
+    function void compute_write_next_state(pkt_proc_seq_item tr);
+        unique case (write_state)
             IDLE_W: begin
                 if (ref_enq_req_r && ref_in_sop_r1) begin
-                    write_state = WRITE_HEADER;
+                    write_state_next = WRITE_HEADER;
+                end else begin
+                    write_state_next = IDLE_W;
                 end
             end
-            
+
             WRITE_HEADER: begin
                 if (ref_in_sop_r1) begin
-                    write_state = WRITE_HEADER;  // Stay in header
+                    write_state_next = WRITE_HEADER;  // Stay in header
                 end else if (is_packet_invalid(tr)) begin
-                    write_state = ERROR;
+                    write_state_next = ERROR;
                 end else begin
-                    write_state = WRITE_DATA;
+                    write_state_next = WRITE_DATA;
                 end
             end
-            
+
             WRITE_DATA: begin
                 if (ref_in_sop_r1 && ref_enq_req_r) begin
-                    write_state = WRITE_HEADER;  // New packet
+                    write_state_next = WRITE_HEADER;  // New packet
                 end else if (ref_in_eop_r1 && !ref_in_sop_r1 && !ref_enq_req_r) begin
-                    write_state = IDLE_W;  // End of packet
+                    write_state_next = IDLE_W;  // End of packet
                 end else begin
-                    write_state = WRITE_DATA;  // Continue data
+                    write_state_next = WRITE_DATA;  // Continue data
                 end
             end
-            
+
             ERROR: begin
-                write_state = IDLE_W;  // Return to idle
+                write_state_next = IDLE_W;  // Return to idle
             end
         endcase
     endfunction
 
-    function void update_read_fsm(pkt_proc_seq_item tr);
-        case (read_state)
+    function void compute_read_next_state(pkt_proc_seq_item tr);
+        unique case (read_state)
             IDLE_R: begin
                 if (ref_deq_req_r && !ref_buffer_empty) begin
-                    read_state = READ_HEADER;
+                    read_state_next = READ_HEADER;
+                end else begin
+                    read_state_next = IDLE_R;
                 end
             end
-            
+
             READ_HEADER: begin
-                read_state = READ_DATA;
+                read_state_next = READ_DATA;
             end
-            
+
             READ_DATA: begin
                 if (ref_buffer_empty) begin
-                    read_state = IDLE_R;
+                    read_state_next = IDLE_R;
                 end else if ((ref_count_r == (ref_packet_length - 1)) && ref_deq_req_r) begin
-                    read_state = READ_HEADER;  // Next packet
+                    read_state_next = READ_HEADER;  // Next packet
                 end else if ((ref_count_r == (ref_packet_length - 1)) && !ref_deq_req_r) begin
-                    read_state = IDLE_R;  // End of packet
+                    read_state_next = IDLE_R;  // End of packet
                 end else begin
-                    read_state = READ_DATA;  // Continue reading
+                    read_state_next = READ_DATA;  // Continue reading
                 end
             end
         endcase
@@ -458,17 +487,17 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
         end
         
-        // Read operations with one-cycle delay (matching DUT pipeline)
+        // Read operations with one-cycle delay for data path only (matching DUT memory pipeline)
         if (ref_rd_en_prev && !ref_buffer_empty) begin
             ref_rd_data_delayed = ref_buffer[ref_rd_ptr[13:0]];
             ref_rd_ptr = ref_rd_ptr + 1;
-            ref_count_r = ref_count_r + 1;
-            
-            if (read_state == READ_HEADER) begin
-                ref_packet_length = ref_pck_len_buffer[ref_pck_len_rd_ptr[4:0]];
-                ref_pck_len_rd_ptr = ref_pck_len_rd_ptr + 1;
-                // DON'T reset counter here - it should be reset when out_eop is generated
-            end
+            // NOTE: Do not increment ref_count_r here; count is driven by FSM on deq_req_r
+        end
+
+        // Packet length read aligns with deq_req_r in READ_HEADER (no extra delay)
+        if (read_state == READ_HEADER && ref_deq_req_r) begin
+            ref_packet_length = ref_pck_len_buffer[ref_pck_len_rd_ptr[4:0]];
+            ref_pck_len_rd_ptr = ref_pck_len_rd_ptr + 1;
         end
         
         // Packet drop handling
@@ -512,15 +541,15 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_write_level_next();
-        // Write level logic (matching RTL's always_ff exactly)
-        // Use previous cycle's write/read enables to match DUT timing
+        // Write level logic (matching RTL always_ff):
+        // wr_lvl_next is computed from previous-cycle enables/states and applied on this cycle
         if (ref_packet_drop) begin
             ref_wr_lvl_next = ref_wr_lvl - ref_count_w;
-        end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en_prev && !ref_buffer_empty) && (!ref_overflow)) begin
+        end else if ((ref_wr_en_prev && !ref_buffer_full_prev) && (ref_rd_en_prev && !ref_buffer_empty_prev) && (!ref_overflow_prev)) begin
             ref_wr_lvl_next = ref_wr_lvl;  // No change
-        end else if (ref_wr_en && !ref_buffer_full) begin
+        end else if (ref_wr_en_prev && !ref_buffer_full_prev) begin
             ref_wr_lvl_next = ref_wr_lvl + 1;
-        end else if (ref_rd_en_prev && !ref_buffer_empty) begin
+        end else if (ref_rd_en_prev && !ref_buffer_empty_prev) begin
             ref_wr_lvl_next = ref_wr_lvl - 1;
         end else begin
             ref_wr_lvl_next = ref_wr_lvl;  // No change
@@ -563,22 +592,39 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_out_sop = 0;
         ref_out_eop = 0;
         
-        if (read_state == READ_HEADER && ref_deq_req_prev2) begin
-            ref_out_sop = 1;
-        end else if (read_state == READ_DATA && ref_deq_req_prev2) begin
-            if (ref_count_r == (ref_packet_length - 1)) begin
-                ref_out_eop = 1;
-                // Reset read counter when out_eop is generated (matching RTL)
-                ref_count_r = 0;
+        // Scoreboard mirrors RTL next_state/output timing using present_state and deq_req_r
+        // Outputs depend on present state and registered deq_req_r
+        unique case (read_state)
+            IDLE_R: begin
+                ref_out_sop = 0;
+                ref_out_eop = 0;
             end
-        end
+            READ_HEADER: begin
+                if (ref_deq_req_r) begin
+                    ref_out_sop = 1;
+                    ref_out_eop = 0;
+                    // Start/advance packet counter on deq_req_r
+                    ref_count_r = ref_count_r + 1;
+                end
+            end
+            READ_DATA: begin
+                if (ref_deq_req_r) begin
+                    // Increment count on each dequeued data beat; assert eop on last beat
+                    ref_count_r = ref_count_r + 1;
+                    if (ref_count_r == (ref_packet_length)) begin
+                        ref_out_eop = 1;
+                        ref_count_r = 0; // packet boundary
+                    end
+                end
+            end
+        endcase
         
         // Combinational output signals (matching RTL exactly)
         update_combinational_outputs(tr);
         
         // Debug out_sop calculation
-        `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop calc: read_state=%0d, deq_req_prev2=%0b, out_sop=%0b", 
-                 read_state, ref_deq_req_prev2, ref_out_sop), UVM_LOW)
+        `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop/eop: state=%0d, deq_req_r=%0b, count_r=%0d, pck_len=%0d, out_sop=%0b, out_eop=%0b", 
+                 read_state, ref_deq_req_r, ref_count_r, ref_packet_length, ref_out_sop, ref_out_eop), UVM_LOW)
     endfunction
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
