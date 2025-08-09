@@ -445,35 +445,19 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function bit is_packet_invalid(pkt_proc_seq_item tr);
-        // Invalid packet conditions (matching RTL)
-        if (tr.in_sop && tr.in_eop) begin
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: Invalid packet: SOP and EOP asserted together", $time), UVM_LOW)
+        // Mirror RTL pck_invalid: (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) && enq_req
+        bit cond1, cond3, cond4, cond5, cond6;
+        cond1 = (tr.in_sop && tr.in_eop);
+        cond3 = (tr.in_sop && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+        // Use WRITE-PATH packet length for these checks
+        cond4 = ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
+        cond5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+        cond6 = (ref_pck_proc_overflow);
+
+        if (tr.enq_req && (cond1 || cond3 || cond4 || cond5 || cond6)) begin
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: pck_invalid: enq_req=1, state=%0d, cond1=%0b, cond3=%0b, cond4=%0b, cond5=%0b, cond6=%0b, count_w=%0d, pck_len_w=%0d, in_sop=%0b, in_eop_r1=%0b",
+                     $time, write_state, cond1, cond3, cond4, cond5, cond6, ref_count_w, ref_packet_length_w, tr.in_sop, ref_in_eop_r1), UVM_LOW)
             return 1;
-        end
-        if (ref_in_sop_r && ref_in_sop_r1)  begin
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Back-to-back SOP ref in_sop_r = %0b, ref in_sop_r1 = %0b", ref_in_sop_r, ref_in_sop_r1), UVM_LOW)
-            return 1;
-        end
-        if (tr.in_sop && (write_state == WRITE_DATA) && !ref_in_eop_r1) begin 
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("SOP during data:  DUT in_sop = %0b, write_state = %0d, ref in_eop_r1 = %0b", tr.in_sop, write_state, ref_in_eop_r1), UVM_LOW); 
-            return 1; 
-        end
-        // Use write-path packet length for write-side validity checks
-        if (ref_in_eop_r1 && (ref_count_w < ref_packet_length_w - 1) && (ref_packet_length_w != 0)) begin 
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Early EOP: ref in_eop_r1 = %0b, ref count_w = %0d, ref packet_length_w = %0d", ref_in_eop_r1, ref_count_w, ref_packet_length_w), UVM_LOW) 
-            return 1; 
-        end
-        if (!ref_in_eop_r1 && ((ref_count_w == ref_packet_length_w - 1) || (ref_packet_length_w == 0)) && (write_state == WRITE_DATA)) begin 
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Late EOP: ref in_eop_r1 = %0b, ref count_w = %0d, ref packet_length_w = %0d, write_state = %0d", ref_in_eop_r1, ref_count_w, ref_packet_length_w, write_state), UVM_LOW) 
-            return 1; 
-        end
-        if (ref_pck_proc_overflow) begin 
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Overflow condition: ref pck_proc_overflow = %0b", ref_pck_proc_overflow), UVM_LOW) 
-            return 1; 
-        end
-        if (tr.pck_len_valid && (tr.pck_len_i <= 1)) begin 
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Invalid pck_len: DUT pck_len_valid = %0b, DUT pck_len_i = %0d", tr.pck_len_valid, tr.pck_len_i), UVM_LOW) 
-            return 1; 
         end
         return 0;
     endfunction
