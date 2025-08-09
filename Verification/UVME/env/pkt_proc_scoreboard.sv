@@ -217,7 +217,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Update overflow/underflow detection
         update_overflow_underflow(tr);
         
-        // Update previous-cycle trackers for next computation
+        // Update previous-cycle trackers for debug (not used in current wr_lvl calc)
         ref_rd_en_prev = ref_rd_en;
         ref_wr_en_prev = ref_wr_en;
         ref_buffer_full_prev  = ref_buffer_full;
@@ -542,14 +542,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
     function void update_write_level_next();
         // Write level logic (matching RTL always_ff):
-        // wr_lvl_next is computed from previous-cycle enables/states and applied on this cycle
+        // Compute from CURRENT-cycle enables and CURRENT buffer states (which reflect previous pointers this edge)
         if (ref_packet_drop) begin
             ref_wr_lvl_next = ref_wr_lvl - ref_count_w;
-        end else if ((ref_wr_en_prev && !ref_buffer_full_prev) && (ref_rd_en_prev && !ref_buffer_empty_prev) && (!ref_overflow_prev)) begin
+        end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_overflow)) begin
             ref_wr_lvl_next = ref_wr_lvl;  // No change
-        end else if (ref_wr_en_prev && !ref_buffer_full_prev) begin
+        end else if (ref_wr_en && !ref_buffer_full) begin
             ref_wr_lvl_next = ref_wr_lvl + 1;
-        end else if (ref_rd_en_prev && !ref_buffer_empty_prev) begin
+        end else if (ref_rd_en && !ref_buffer_empty) begin
             ref_wr_lvl_next = ref_wr_lvl - 1;
         end else begin
             ref_wr_lvl_next = ref_wr_lvl;  // No change
