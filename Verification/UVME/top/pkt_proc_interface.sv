@@ -67,7 +67,7 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
   //Monitoring the outputs from the DUT at positive edge of the clock as the RTL is written in posedge
   clocking monitor_cb @(posedge pck_proc_int_mem_fsm_clk);
     //Monitoring the outputs from the DUT
-    default input #0 output #0;
+    default input #0 output #1;
     input out_sop;
     input rd_data_o;
     input out_eop;

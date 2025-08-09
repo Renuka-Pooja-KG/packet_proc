@@ -447,27 +447,27 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             return 1;
         end
         if (ref_in_sop_r && ref_in_sop_r1)  begin
-            `uvm_info("PKT_DROP_DEBUG", "Back-to-back SOP", UVM_LOW)
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Back-to-back SOP ref in_sop_r = %0b, ref in_sop_r1 = %0b", ref_in_sop_r, ref_in_sop_r1), UVM_LOW)
             return 1;
         end
         if (tr.in_sop && (write_state == WRITE_DATA) && !ref_in_eop_r1) begin 
-            `uvm_info("PKT_DROP_DEBUG", "SOP during data", UVM_LOW); 
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("SOP during data:  DUT in_sop = %0b, write_state = %0d, ref in_eop_r1 = %0b", tr.in_sop, write_state, ref_in_eop_r1), UVM_LOW); 
             return 1; 
         end
         if (ref_in_eop_r1 && (ref_count_w < ref_packet_length - 1) && (ref_packet_length != 0)) begin 
-            `uvm_info("PKT_DROP_DEBUG", "Early EOP", UVM_LOW) 
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Early EOP: ref in_eop_r1 = %0b, ref count_w = %0d, ref packet_length = %0d", ref_in_eop_r1, ref_count_w, ref_packet_length), UVM_LOW) 
             return 1; 
         end
-        if (!ref_in_eop_r1 && (ref_count_w == ref_packet_length - 1) && (write_state == WRITE_DATA)) begin 
-            `uvm_info("PKT_DROP_DEBUG", "Late EOP", UVM_LOW) 
+        if (!ref_in_eop_r1 && ((ref_count_w == ref_packet_length - 1) || (ref_packet_length == 0)) && (write_state == WRITE_DATA)) begin 
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Late EOP: ref in_eop_r1 = %0b, ref count_w = %0d, ref packet_length = %0d, write_state = %0d", ref_in_eop_r1, ref_count_w, ref_packet_length, write_state), UVM_LOW) 
             return 1; 
         end
         if (ref_pck_proc_overflow) begin 
-            `uvm_info("PKT_DROP_DEBUG", "Overflow condition", UVM_LOW) 
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Overflow condition: ref pck_proc_overflow = %0b", ref_pck_proc_overflow), UVM_LOW) 
             return 1; 
         end
         if (tr.pck_len_valid && (tr.pck_len_i <= 1)) begin 
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Invalid pck_len: %0d", tr.pck_len_i), UVM_LOW) 
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Invalid pck_len: DUT pck_len_valid = %0b, DUT pck_len_i = %0d", tr.pck_len_valid, tr.pck_len_i), UVM_LOW) 
             return 1; 
         end
         return 0;
