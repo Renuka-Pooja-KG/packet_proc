@@ -591,12 +591,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         bit invalid_1 = (tr.in_sop && tr.in_eop);
         bit invalid_3 = (tr.in_sop && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
         bit invalid_4 = ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
-        bit invalid_5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+        // CRITICAL FIX: invalid_5 should check CURRENT cycle in_eop, not previous cycle in_eop_r1
+        // This prevents false packet drops when a packet legitimately completes
+        bit invalid_5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~tr.in_eop) && (write_state == WRITE_DATA));
         bit invalid_6 = ref_pck_proc_overflow;
 
         // Debug: Show condition calculations that use ref_packet_length_w
-        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop=%0b && in_eop=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r1=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
-                 $time, invalid_1, tr.in_sop, tr.in_eop, invalid_3, tr.in_sop, ref_in_eop_r1, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
+        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop=%0b && in_eop=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r1=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
+                 $time, invalid_1, tr.in_sop, tr.in_eop, invalid_3, tr.in_sop, ref_in_eop_r1, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), tr.in_eop, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
 
         // pck_invalid = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) && enq_req
         if (tr.enq_req && (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6)) begin
