@@ -76,6 +76,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_overflow;               // Internal overflow signal (matching int_buffer_top)
     bit ref_overflow_prev;          // Previous cycle's overflow
     
+    // Almost full/empty threshold values (matching RTL)
+    bit [14:0] ref_almost_full_value;
+    bit [14:0] ref_almost_empty_value;
+    
     // One-cycle delayed signals (matching RTL's always_ff outputs)
     bit ref_buffer_empty_delayed;   // One-cycle delayed buffer_empty
     
@@ -116,6 +120,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_buffer_empty = 1;
         ref_pck_len_full = 0;
         ref_pck_len_empty = 1;
+        
+        // Initialize almost full/empty threshold values (matching RTL defaults)
+        ref_almost_full_value = 14'd16383;  // DEPTH - 1 (assuming 14-bit address)
+        ref_almost_empty_value = 14'd1;     // Almost empty threshold
         
         // Initialize flags
         ref_pck_proc_overflow = 0;
@@ -205,29 +213,26 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Generate write/read enables FIRST (matching RTL order)
         generate_write_read_enables(tr);
         
-        // Update write level based on current enables (matching RTL order)
-        update_write_level_next();
+        // Calculate packet drop logic (matching RTL exactly)
+        update_packet_drop_logic(tr);
         
-        // Update internal overflow signal
-        update_internal_overflow();
-        
-        // Update write level (registered output computed from prior-cycle enables/states)
-        ref_wr_lvl = ref_wr_lvl_next;
-        
-        // Debug wr_lvl calculation
-        `uvm_info("WR_LVL_DEBUG", $sformatf("wr_lvl calc: wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, wr_lvl_next=%0d, wr_lvl=%0d", 
-                 ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_wr_lvl_next, ref_wr_lvl), UVM_LOW)
-        
-        // NOW perform buffer operations (after wr_lvl calculation)
+        // NOW perform buffer operations FIRST (matching RTL order)
         update_buffer_operations(tr);
         
         // Update buffer states based on the operations just performed
         update_buffer_states();
         
-        // Update overflow/underflow detection
-        update_overflow_underflow(tr);
+        // Update internal overflow signal
+        update_internal_overflow();
         
-        // Update previous-cycle trackers for debug (not used in current wr_lvl calc)
+        // Update write level based on current enables AFTER buffer operations (matching RTL order)
+        update_write_level_next();
+        
+        // Debug wr_lvl calculation (but don't update ref_wr_lvl yet - it updates on next cycle like RTL)
+        `uvm_info("WR_LVL_DEBUG", $sformatf("wr_lvl_next calc: wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, wr_lvl_next=%0d, current_wr_lvl=%0d", 
+                 ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_wr_lvl_next, ref_wr_lvl), UVM_LOW)
+        
+        // Update previous-cycle trackers BEFORE buffer operations (matching RTL timing)
         ref_rd_en_prev = ref_rd_en;
         ref_wr_en_prev = ref_wr_en;
         ref_buffer_full_prev  = ref_buffer_full;
@@ -235,6 +240,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_overflow_prev = ref_overflow;
         ref_deq_req_prev2 = ref_deq_req_prev;
         ref_deq_req_prev = ref_deq_req_r;
+        
+        // Update overflow/underflow detection
+        update_overflow_underflow(tr);
         
         // Update outputs (depend on PRESENT state)
         update_outputs(tr);
@@ -396,55 +404,67 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_deq_req_r1 = tr.deq_req;  // sample input
         ref_deq_req_r  = ref_deq_req_r1; // registered output (1-cycle delayed)
         ref_empty_de_assert = tr.empty_de_assert;
+        
+        // Update write level (matching RTL always_ff behavior - updates on clock edge)
+        ref_wr_lvl = ref_wr_lvl_next;
+        
+        // Debug write level update
+        `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: ref_wr_lvl updated from %0d to %0d (matching RTL clock edge behavior)", 
+                 $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
     endfunction
 
     function void compute_write_next_state(pkt_proc_seq_item tr);
         unique case (write_state)
             IDLE_W: begin
-                if (ref_enq_req_r && ref_in_sop_r1) begin
+                // Use current cycle values (matching RTL behavior exactly)
+                if (tr.enq_req && tr.in_sop) begin
                     write_state_next = WRITE_HEADER;
-                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: IDLE_W -> WRITE_HEADER (enq_req=%0b, in_sop_r1=%0b)", 
-                             $time, ref_enq_req_r, ref_in_sop_r1), UVM_LOW)
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: IDLE_W -> WRITE_HEADER (enq_req=%0b, in_sop=%0b)", 
+                             $time, tr.enq_req, tr.in_sop), UVM_LOW)
                 end else begin
                     write_state_next = IDLE_W;
                 end
             end
 
             WRITE_HEADER: begin
-                if (ref_in_sop_r1) begin
+                // Use current cycle values (matching RTL behavior exactly)
+                if (tr.in_sop) begin
                     write_state_next = WRITE_HEADER;
-                end else if (is_packet_invalid(tr)) begin
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_HEADER (in_sop=%0b)", 
+                             $time, tr.in_sop), UVM_LOW)
+                end else if (ref_packet_drop) begin
                     write_state_next = ERROR;
-                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> ERROR (packet invalid)", $time), UVM_LOW)
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> ERROR (packet_drop=%0b)", 
+                             $time, ref_packet_drop), UVM_LOW)
                 end else begin
                     write_state_next = WRITE_DATA;
-                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_DATA (valid packet)", $time), UVM_LOW)
-                end
-                // Update write-path packet length when header is written
-                if (ref_enq_req_r && !ref_packet_drop) begin // Only update if not dropping
-                    ref_packet_length_w = (ref_pck_len_valid_r1) ? ref_pck_len_i_r1 : ref_wr_data_r1[11:0];
-                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: ref_packet_length_w assigned in compute_write_next_state: pck_len_valid_r1=%0b, pck_len_i_r1=%0d, wr_data_r1[11:0]=%0d, result=%0d, tr.pck_len_valid=%0b, tr.in_sop=%0b, tr.pck_len_i=%0d", 
-                             $time, ref_pck_len_valid_r1, ref_pck_len_i_r1, ref_wr_data_r1[11:0], ref_packet_length_w, tr.pck_len_valid, tr.in_sop, tr.pck_len_i), UVM_LOW)
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_DATA (advance to data)", $time), UVM_LOW)
                 end
             end
 
             WRITE_DATA: begin
-                if (ref_in_sop_r1 && ref_enq_req_r) begin
-                    write_state_next = WRITE_HEADER;  // New packet
-                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_DATA -> WRITE_HEADER (new packet: in_sop_r1=%0b, enq_req_r=%0b)", 
-                             $time, ref_in_sop_r1, ref_enq_req_r), UVM_LOW)
-                end else if (ref_in_eop_r1 && !ref_in_sop_r1 && !ref_enq_req_r) begin
-                    write_state_next = IDLE_W;  // End of packet
-                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_DATA -> IDLE_W (end of packet: in_eop_r1=%0b, in_sop_r1=%0b, enq_req_r=%0b)", 
-                             $time, ref_in_eop_r1, ref_in_sop_r1, ref_enq_req_r), UVM_LOW)
+                // Use current cycle values (matching RTL behavior exactly)
+                if (tr.enq_req && tr.in_sop) begin
+                    write_state_next = WRITE_HEADER;
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_DATA -> WRITE_HEADER (next_data_ready: enq_req=%0b, in_sop=%0b)", 
+                             $time, tr.enq_req, tr.in_sop), UVM_LOW)
+                end else if (ref_in_eop_r1 && !tr.in_sop && !tr.enq_req) begin
+                    write_state_next = IDLE_W;
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_DATA -> IDLE_W (next_data_nt_ready: in_eop_r1=%0b, in_sop=%0b, enq_req=%0b)", 
+                             $time, ref_in_eop_r1, tr.in_sop, tr.enq_req), UVM_LOW)
                 end else begin
-                    write_state_next = WRITE_DATA;  // Continue data
+                    write_state_next = WRITE_DATA;
                 end
             end
 
             ERROR: begin
-                write_state_next = IDLE_W;  // Return to idle
-                `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: ERROR -> IDLE_W (return to idle)", $time), UVM_LOW)
+                write_state_next = IDLE_W;
+                `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: ERROR -> IDLE_W (error recovery)", $time), UVM_LOW)
+            end
+
+            default: begin
+                write_state_next = IDLE_W;
+                `uvm_error("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: Unknown state %0d, resetting to IDLE_W", $time, write_state))
             end
         endcase
     endfunction
@@ -452,6 +472,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     function void compute_read_next_state(pkt_proc_seq_item tr);
         unique case (read_state)
             IDLE_R: begin
+                // Use registered values (matching RTL behavior exactly)
                 if (ref_deq_req_r && !ref_buffer_empty) begin
                     read_state_next = READ_HEADER;
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: IDLE_R -> READ_HEADER (deq_req_r=%0b, buffer_empty=%0b)", 
@@ -518,7 +539,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void generate_write_read_enables(pkt_proc_seq_item tr);
-        // Determine write enable (matching RTL logic)
+        // Determine write enable (matching RTL logic exactly)
+        // RTL uses enq_req_r for output logic, but current cycle values for state transitions
         ref_wr_en = 0;
         if (write_state == WRITE_HEADER && ref_enq_req_r && !ref_packet_drop) begin
             ref_wr_en = 1;
@@ -528,11 +550,44 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Determine read enable (matching RTL logic)
         ref_rd_en = 0;
-        if (read_state == READ_HEADER && ref_deq_req_r) begin
+        if (read_state == READ_HEADER && tr.deq_req) begin
             ref_rd_en = 1;
-        end else if (read_state == READ_DATA && ref_deq_req_r) begin
+        end else if (read_state == READ_DATA && tr.deq_req) begin
             ref_rd_en = 1;
         end
+    endfunction
+
+    function void update_packet_drop_logic(pkt_proc_seq_item tr);
+        // Calculate packet drop logic (matching RTL exactly)
+        // pck_invalid = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) && enq_req
+        // invalid_1 = in_sop && in_eop
+        // invalid_3 = in_sop && (~in_eop_r1) && (write_state == WRITE_DATA)
+        // invalid_4 = (count_w < (packet_length_w - 1)) && (packet_length_w != 0) && (in_eop_r1)
+        // invalid_5 = ((count_w == (packet_length_w - 1)) || (packet_length_w == 0)) && (~in_eop_r1) && (write_state == WRITE_DATA)
+        // invalid_6 = pck_proc_overflow
+
+        // Use WRITE-PATH packet length for these checks
+        bit invalid_1 = (tr.in_sop && tr.in_eop);
+        bit invalid_3 = (tr.in_sop && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+        bit invalid_4 = ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
+        bit invalid_5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+        bit invalid_6 = ref_pck_proc_overflow;
+
+        // Debug: Show condition calculations that use ref_packet_length_w
+        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop=%0b && in_eop=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r1=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
+                 $time, invalid_1, tr.in_sop, tr.in_eop, invalid_3, tr.in_sop, ref_in_eop_r1, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
+
+        // pck_invalid = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) && enq_req
+        if (tr.enq_req && (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6)) begin
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: pck_invalid: enq_req=1, state=%0d, invalid_1=%0b, invalid_3=%0b, invalid_4=%0b, invalid_5=%0b, invalid_6=%0b, count_w=%0d, pck_len_w=%0d, in_sop=%0b, in_eop_r1=%0b",
+                     $time, write_state, invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, ref_count_w, ref_packet_length_w, tr.in_sop, ref_in_eop_r1), UVM_LOW)
+            ref_packet_drop = 1;
+        end else begin
+            ref_packet_drop = 0;
+        end
+        
+        // Store previous value for next cycle
+        ref_packet_drop_prev = ref_packet_drop;
     endfunction
 
     function void update_buffer_operations(pkt_proc_seq_item tr);
@@ -542,18 +597,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Write operations
         if (ref_wr_en && !ref_buffer_full) begin
             if (write_state == WRITE_HEADER) begin
-                ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r1;
-                ref_pck_len_buffer[ref_pck_len_wr_ptr[4:0]] = 
-                    (ref_pck_len_valid_r1) ? ref_pck_len_i_r1 : ref_wr_data_r1[11:0];
-                ref_pck_len_wr_ptr = ref_pck_len_wr_ptr + 1;
-                // Update write-path packet length mirror (used in scoreboard pck_invalid checks)
-                ref_packet_length_w = (ref_pck_len_valid_r1) ? ref_pck_len_i_r1 : ref_wr_data_r1[11:0];
-                
-                // Debug print for ref_packet_length_w assignment
-                `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: ref_packet_length_w assigned in WRITE_HEADER: pck_len_valid_r1=%0b, pck_len_i_r1=%0d, wr_data_r1[11:0]=%0d, result=%0d, tr.pck_len_valid=%0b, tr.in_sop=%0b, tr.pck_len_i=%0d", 
-                         $time, ref_pck_len_valid_r1, ref_pck_len_i_r1, ref_wr_data_r1[11:0], ref_packet_length_w, tr.pck_len_valid, tr.in_sop, tr.pck_len_i), UVM_LOW)
+                ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r1;  // Use registered value
             end else if (write_state == WRITE_DATA) begin
-                ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r1;
+                ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r1;  // Use registered value
             end
             
             if (write_state == WRITE_HEADER || write_state == WRITE_DATA) begin
@@ -562,7 +608,29 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
         end
         
+        // Packet length buffer operations (matching RTL exactly)
+        // RTL writes to pck_len_buffer in WRITE_HEADER state regardless of wr_en
+        if (write_state == WRITE_HEADER) begin
+            ref_pck_len_buffer[ref_pck_len_wr_ptr[4:0]] = 
+                (ref_pck_len_valid_r1) ? ref_pck_len_i_r1 : ref_wr_data_r1[11:0];  // Use registered values
+            ref_pck_len_wr_ptr = ref_pck_len_wr_ptr + 1;
+            
+            // Update write-path packet length mirror (used in scoreboard pck_invalid checks)
+            // Use RTL logic: pck_len_r2 = (pck_len_valid_r1) ? pck_len_i_r1 : ((in_sop_r1) ? wr_data_r1[11:0] : packet_length)
+            if (ref_pck_len_valid_r1) begin
+                ref_packet_length_w = ref_pck_len_i_r1;
+            end else if (ref_in_sop_r1) begin
+                ref_packet_length_w = ref_wr_data_r1[11:0];
+            end
+            // Note: if neither condition is met, ref_packet_length_w keeps its previous value (matching RTL)
+            
+            // Debug print for ref_packet_length_w assignment
+            `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: ref_packet_length_w assigned in WRITE_HEADER: pck_len_valid_r1=%0b, in_sop_r1=%0b, pck_len_i_r1=%0d, wr_data_r1[11:0]=%0d, result=%0d", 
+                     $time, ref_pck_len_valid_r1, ref_in_sop_r1, ref_pck_len_i_r1, ref_wr_data_r1[11:0], ref_packet_length_w), UVM_LOW)
+        end
+        
         // Read operations with one-cycle delay for data path only (matching DUT memory pipeline)
+        // Use ref_rd_en_prev for pointer updates (data path timing)
         if (ref_rd_en_prev && !ref_buffer_empty) begin
             ref_rd_data_delayed = ref_buffer[ref_rd_ptr[13:0]];
             ref_rd_ptr = ref_rd_ptr + 1;
@@ -570,14 +638,15 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
 
         // Packet length read aligns with deq_req_r in READ_HEADER (no extra delay)
-        if (read_state == READ_HEADER && ref_deq_req_r) begin
+        if (read_state == READ_HEADER && tr.deq_req) begin
             ref_packet_length = ref_pck_len_buffer[ref_pck_len_rd_ptr[4:0]];
             ref_pck_len_rd_ptr = ref_pck_len_rd_ptr + 1;
         end
         
-        // Packet drop handling
+        // Packet drop handling - now handled in update_packet_drop_logic()
+        // Just apply the packet drop effects here
         if (ref_packet_drop) begin
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP asserted. overflow=%0b, count_w=%0d, wr_ptr(before)=%0d",
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP applied. overflow=%0b, count_w=%0d, wr_ptr(before)=%0d",
                      $time, ref_pck_proc_overflow, ref_count_w, ref_wr_ptr), UVM_LOW)
             if (ref_pck_proc_overflow) begin
                 ref_wr_ptr = ref_wr_ptr - ref_count_w + 1;
@@ -585,7 +654,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 ref_wr_ptr = ref_wr_ptr - ref_count_w;
             end
             ref_count_w = 0;
-            ref_packet_drop = 0;
+            // Note: ref_packet_drop is reset in update_packet_drop_logic() for next cycle
             `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP applied. wr_ptr(after)=%0d, wr_lvl=%0d",
                      $time, ref_wr_ptr, ref_wr_lvl), UVM_LOW)
         end
@@ -595,7 +664,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Buffer full condition (matching RTL)
         ref_buffer_full = (({~ref_wr_ptr[14], ref_wr_ptr[13:0]} == ref_rd_ptr));
         
-        // Buffer empty condition (matching RTL)
+        // Buffer empty condition (matching RTL exactly)
+        // RTL calculates this as a combinational signal based on current pointer values
+        // (which reflect the previous cycle's state)
         if ((ref_empty_de_assert == 0) && (ref_wr_ptr != ref_rd_ptr)) begin
             ref_buffer_empty = 0;
         end else if ((ref_in_eop_r2 && (ref_wr_ptr != ref_rd_ptr) && (ref_empty_de_assert == 1))) begin
@@ -620,8 +691,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_write_level_next();
-        // Write level logic (matching RTL always_ff):
-        // Compute from CURRENT-cycle enables and CURRENT buffer states (which reflect previous pointers this edge)
+        // Write level logic (matching RTL always_ff exactly):
+        // RTL calculates based on CURRENT cycle enables and CURRENT buffer states
         if (ref_packet_drop) begin
             ref_wr_lvl_next = ref_wr_lvl - ref_count_w;
         end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_overflow)) begin
@@ -633,6 +704,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end else begin
             ref_wr_lvl_next = ref_wr_lvl;  // No change
         end
+        
+        // Debug wr_lvl calculation details
+        `uvm_info("WR_LVL_DEBUG", $sformatf("wr_lvl_next calc: wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, overflow=%0b, current_wr_lvl=%0d, next_wr_lvl=%0d", 
+                 ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_overflow, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
     endfunction
 
     function void update_internal_overflow();
@@ -700,7 +775,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 ref_out_eop = 0;
             end
             READ_HEADER: begin
-                if (ref_deq_req_r) begin
+                if (tr.deq_req) begin
                     ref_out_sop = 1;
                     ref_out_eop = 0;
                     // Start/advance packet counter on deq_req_r
@@ -708,7 +783,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 end
             end
             READ_DATA: begin
-                if (ref_deq_req_r) begin
+                if (tr.deq_req) begin
                     // Increment count on each dequeued data beat; assert eop on last beat
                     ref_count_r = ref_count_r + 1;
                     if (ref_count_r == (ref_packet_length)) begin
@@ -724,14 +799,16 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Debug out_sop calculation
         `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop/eop: state=%0d, deq_req_r=%0b, count_r=%0d, pck_len=%0d, out_sop=%0b, out_eop=%0b", 
-                 read_state, ref_deq_req_r, ref_count_r, ref_packet_length, ref_out_sop, ref_out_eop), UVM_LOW)
+                 read_state, tr.deq_req, ref_count_r, ref_packet_length, ref_out_sop, ref_out_eop), UVM_LOW)
     endfunction
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
         // pck_proc_full (from buffer_full) - matching RTL assign
         ref_buffer_full = (({~ref_wr_ptr[14], ref_wr_ptr[13:0]} == ref_rd_ptr));
         
-        // pck_proc_empty (from buffer_empty) - matching RTL assign
+        // pck_proc_empty (from buffer_empty) - matching RTL assign exactly
+        // RTL calculates this as a combinational signal based on current pointer values
+        // (which reflect the previous cycle's state)
         if ((ref_empty_de_assert == 0) && (ref_wr_ptr != ref_rd_ptr)) begin
             ref_buffer_empty = 0;
         end else if ((ref_in_eop_r2 && (ref_wr_ptr != ref_rd_ptr) && (ref_empty_de_assert == 1))) begin
@@ -742,21 +819,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_buffer_empty = ref_buffer_empty_r;
         end
         
-        // pck_proc_almost_full (from almost_full) - matching RTL always_comb
-        temp_full = (ref_wr_lvl >= DEPTH - tr.pck_proc_almost_full_value);
-        if (temp_full) begin
-            ref_pck_proc_almost_full = 1;
-        end else begin
-            ref_pck_proc_almost_full = 0;
-        end
+        // pck_proc_almost_full (from buffer_almost_full) - matching RTL assign
+        ref_buffer_almost_full = (ref_wr_lvl >= ref_almost_full_value);
         
-        // pck_proc_almost_empty (from almost_empty) - matching RTL always_comb
-        temp_empty = (ref_wr_lvl <= tr.pck_proc_almost_empty_value);
-        if (temp_empty) begin
-            ref_pck_proc_almost_empty = 1;
-        end else begin
-            ref_pck_proc_almost_empty = 0;
-        end
+        // pck_proc_almost_empty (from buffer_almost_empty) - matching RTL assign
+        ref_buffer_almost_empty = (ref_wr_lvl <= ref_almost_empty_value);
     endfunction
 
     function void compare_outputs(pkt_proc_seq_item tr);
@@ -817,10 +884,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             errors++;
         end
         
-        // if (tr.pck_proc_wr_lvl !== ref_wr_lvl) begin
-        //     `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_wr_lvl mismatch: expected=%0d, got=%0d (wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, overflow=%0b)", ref_wr_lvl, tr.pck_proc_wr_lvl, ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_overflow))
-        //     errors++;
-        // end
+        if (tr.pck_proc_wr_lvl !== ref_wr_lvl) begin
+            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_wr_lvl mismatch: expected=%0d, got=%0d (wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, overflow=%0b)", ref_wr_lvl, tr.pck_proc_wr_lvl, ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_overflow))
+            errors++;
+        end
     endfunction
 
     function void report_phase(uvm_phase phase);
