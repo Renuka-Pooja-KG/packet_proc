@@ -35,16 +35,16 @@ class pkt_proc_monitor extends uvm_monitor;
       tr.pck_proc_almost_full_value = vif.monitor_cb.pck_proc_almost_full_value;
       tr.pck_proc_almost_empty_value = vif.monitor_cb.pck_proc_almost_empty_value;
       
-      // Capture write operation signals - Sample from driver outputs to eliminate propagation delay
-      tr.enq_req = vif.driver_cb.enq_req;
-      tr.in_sop = vif.driver_cb.in_sop;
-      tr.in_eop = vif.driver_cb.in_eop;
-      tr.wr_data_i = vif.driver_cb.wr_data_i;
-      tr.pck_len_valid = vif.driver_cb.pck_len_valid;
-      tr.pck_len_i = vif.driver_cb.pck_len_i;
+      // Capture write operation signals - Sample from raw interface signals (real-time values)
+      tr.enq_req = vif.enq_req;           // Raw signal, not clocking block
+      tr.in_sop = vif.in_sop;             // Raw signal, not clocking block
+      tr.in_eop = vif.in_eop;             // Raw signal, not clocking block
+      tr.wr_data_i = vif.wr_data_i;       // Raw signal, not clocking block
+      tr.pck_len_valid = vif.pck_len_valid; // Raw signal, not clocking block
+      tr.pck_len_i = vif.pck_len_i;       // Raw signal, not clocking block
       
-      // Capture read operation signals - Sample from driver outputs
-      tr.deq_req = vif.driver_cb.deq_req;
+      // Capture read operation signals - Sample from raw interface signals
+      tr.deq_req = vif.deq_req;           // Raw signal, not clocking block
       
       // Capture output signals - These come from RTL, so keep using monitor_cb
       tr.out_sop = vif.monitor_cb.out_sop;
