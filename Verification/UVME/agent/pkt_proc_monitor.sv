@@ -23,6 +23,7 @@ class pkt_proc_monitor extends uvm_monitor;
     
     forever begin
       // Wait for clock edge to synchronize, then capture immediately
+      // Keep at posedge to properly capture RTL outputs
       @(posedge vif.pck_proc_int_mem_fsm_clk);
       
       // Capture reset signals
@@ -34,18 +35,18 @@ class pkt_proc_monitor extends uvm_monitor;
       tr.pck_proc_almost_full_value = vif.monitor_cb.pck_proc_almost_full_value;
       tr.pck_proc_almost_empty_value = vif.monitor_cb.pck_proc_almost_empty_value;
       
-      // Capture write operation signals
-      tr.enq_req = vif.monitor_cb.enq_req;
-      tr.in_sop = vif.monitor_cb.in_sop;
-      tr.in_eop = vif.monitor_cb.in_eop;
-      tr.wr_data_i = vif.monitor_cb.wr_data_i;
-      tr.pck_len_valid = vif.monitor_cb.pck_len_valid;
-      tr.pck_len_i = vif.monitor_cb.pck_len_i;
+      // Capture write operation signals - Sample from driver outputs to eliminate propagation delay
+      tr.enq_req = vif.driver_cb.enq_req;
+      tr.in_sop = vif.driver_cb.in_sop;
+      tr.in_eop = vif.driver_cb.in_eop;
+      tr.wr_data_i = vif.driver_cb.wr_data_i;
+      tr.pck_len_valid = vif.driver_cb.pck_len_valid;
+      tr.pck_len_i = vif.driver_cb.pck_len_i;
       
-      // Capture read operation signals
-      tr.deq_req = vif.monitor_cb.deq_req;
+      // Capture read operation signals - Sample from driver outputs
+      tr.deq_req = vif.driver_cb.deq_req;
       
-      // Capture output signals
+      // Capture output signals - These come from RTL, so keep using monitor_cb
       tr.out_sop = vif.monitor_cb.out_sop;
       tr.rd_data_o = vif.monitor_cb.rd_data_o;
       tr.out_eop = vif.monitor_cb.out_eop;
