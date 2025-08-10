@@ -765,8 +765,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             errors++;
         end
         
-        if (tr.pck_proc_empty !== ref_buffer_empty_delayed) begin
-            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_empty mismatch: expected=%0b, got=%0b", ref_buffer_empty_delayed, tr.pck_proc_empty))
+        if (tr.pck_proc_empty !== ref_buffer_empty) begin
+            `uvm_error("SCOREBOARD_NEW", $sformatf("pck_proc_empty mismatch: expected=%0b, got=%0b", ref_buffer_empty, tr.pck_proc_empty))
             errors++;
         end
         
