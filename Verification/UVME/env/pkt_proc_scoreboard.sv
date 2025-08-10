@@ -210,14 +210,20 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: Next states computed - WRITE: %0d -> %0d, READ: %0d -> %0d", 
                  $time, write_state, write_state_next, read_state, read_state_next), UVM_LOW)
         
+        // Debug current cycle inputs for state transitions
+        `uvm_info("STATE_INPUTS", $sformatf("Time=%0t: Current inputs - in_sop=%0b, in_eop=%0b, enq_req=%0b, pck_len_valid=%0b, pck_len_i=%0d", 
+                 $time, tr.in_sop, tr.in_eop, tr.enq_req, tr.pck_len_valid, tr.pck_len_i), UVM_LOW)
+        
         // Generate write/read enables FIRST (matching RTL order)
         generate_write_read_enables(tr);
         
-        // Calculate packet drop logic (matching RTL exactly)
-        update_packet_drop_logic(tr);
-        
         // NOW perform buffer operations FIRST (matching RTL order)
+        // This updates ref_packet_length_w which is needed for packet drop logic
         update_buffer_operations(tr);
+        
+        // Calculate packet drop logic AFTER buffer operations (matching RTL exactly)
+        // Now ref_packet_length_w is properly updated for the current cycle
+        update_packet_drop_logic(tr);
         
         // Update buffer states based on the operations just performed
         update_buffer_states();
@@ -611,22 +617,26 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Packet length buffer operations (matching RTL exactly)
         // RTL writes to pck_len_buffer in WRITE_HEADER state regardless of wr_en
         if (write_state == WRITE_HEADER) begin
-            ref_pck_len_buffer[ref_pck_len_wr_ptr[4:0]] = 
-                (ref_pck_len_valid_r1) ? ref_pck_len_i_r1 : ref_wr_data_r1[11:0];  // Use registered values
+            // Use RTL logic exactly: pck_len_r2 = (pck_len_valid_r1) ? pck_len_i_r1 : ((in_sop_r1) ? wr_data_r1[11:0] : packet_length)
+            bit [11:0] pck_len_r2_value;
+            if (ref_pck_len_valid_r1) begin
+                pck_len_r2_value = ref_pck_len_i_r1;
+            end else if (ref_in_sop_r1) begin
+                pck_len_r2_value = ref_wr_data_r1[11:0];
+            end else begin
+                pck_len_r2_value = ref_packet_length_w;  // Keep previous value
+            end
+            
+            // Write to packet length buffer (matching RTL pck_len_wr_en = 1'b1 in WRITE_HEADER)
+            ref_pck_len_buffer[ref_pck_len_wr_ptr[4:0]] = pck_len_r2_value;
             ref_pck_len_wr_ptr = ref_pck_len_wr_ptr + 1;
             
-            // Update write-path packet length mirror (used in scoreboard pck_invalid checks)
-            // Use RTL logic: pck_len_r2 = (pck_len_valid_r1) ? pck_len_i_r1 : ((in_sop_r1) ? wr_data_r1[11:0] : packet_length)
-            if (ref_pck_len_valid_r1) begin
-                ref_packet_length_w = ref_pck_len_i_r1;
-            end else if (ref_in_sop_r1) begin
-                ref_packet_length_w = ref_wr_data_r1[11:0];
-            end
-            // Note: if neither condition is met, ref_packet_length_w keeps its previous value (matching RTL)
+            // Update write-path packet length mirror for pck_invalid checks
+            ref_packet_length_w = pck_len_r2_value;
             
-            // Debug print for ref_packet_length_w assignment
-            `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: ref_packet_length_w assigned in WRITE_HEADER: pck_len_valid_r1=%0b, in_sop_r1=%0b, pck_len_i_r1=%0d, wr_data_r1[11:0]=%0d, result=%0d", 
-                     $time, ref_pck_len_valid_r1, ref_in_sop_r1, ref_pck_len_i_r1, ref_wr_data_r1[11:0], ref_packet_length_w), UVM_LOW)
+            // Debug print for packet length assignment
+            `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: pck_len_r2=%0d (pck_len_valid_r1=%0b, in_sop_r1=%0b, pck_len_i_r1=%0d, wr_data_r1[11:0]=%0d, prev_packet_length=%0d)", 
+                     $time, pck_len_r2_value, ref_pck_len_valid_r1, ref_in_sop_r1, ref_pck_len_i_r1, ref_wr_data_r1[11:0], ref_packet_length_w), UVM_LOW)
         end
         
         // Read operations with one-cycle delay for data path only (matching DUT memory pipeline)
