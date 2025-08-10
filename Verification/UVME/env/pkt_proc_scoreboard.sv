@@ -830,10 +830,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // pck_proc_almost_full (from buffer_almost_full) - matching RTL assign
-        ref_buffer_almost_full = (ref_wr_lvl >= ref_almost_full_value);
+        ref_pck_proc_almost_full = (ref_wr_lvl >= ref_almost_full_value);
         
         // pck_proc_almost_empty (from buffer_almost_empty) - matching RTL assign
-        ref_buffer_almost_empty = (ref_wr_lvl <= ref_almost_empty_value);
+        ref_pck_proc_almost_empty = (ref_wr_lvl <= ref_almost_empty_value);
+
     endfunction
 
     function void compare_outputs(pkt_proc_seq_item tr);
