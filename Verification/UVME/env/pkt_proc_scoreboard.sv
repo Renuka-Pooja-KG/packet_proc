@@ -196,9 +196,6 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Handle reset logic FIRST (matching RTL behavior)
         handle_reset_logic(tr);
         
-        // Update pipeline registers (matching RTL exactly)
-        update_pipeline_registers(tr);
-        
         // Compute write next-state (mirror RTL always_comb); advance at end of cycle
         compute_write_next_state(tr);
 
@@ -264,6 +261,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         write_state = write_state_next;
         read_state  = read_state_next;
+        
+        // CRITICAL: Update pipeline registers at the END of the cycle (matching RTL clock edge behavior)
+        // This ensures that all calculations use the PREVIOUS cycle's values
+        `uvm_info("PIPELINE_TIMING", $sformatf("Time=%0t: Updating pipeline registers at END of cycle (for next cycle use)", $time), UVM_LOW)
+        update_pipeline_registers(tr);
     endfunction
 
     function void handle_reset_logic(pkt_proc_seq_item tr);
@@ -405,6 +407,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         ref_pck_len_i_r = ref_pck_len_i_r1;
         ref_pck_len_i_r1 = tr.pck_len_i;
+        
+        // Debug pipeline register updates
+        `uvm_info("PIPELINE_UPDATE", $sformatf("Time=%0t: Pipeline updated - in_sop_r1=%0b->%0b, pck_len_valid_r1=%0b->%0b, pck_len_i_r1=%0d->%0d", 
+                 $time, ref_in_sop_r1, tr.in_sop, ref_pck_len_valid_r1, tr.pck_len_valid, ref_pck_len_i_r1, tr.pck_len_i), UVM_LOW)
         
         // Model RTL register on deq_req: stage and then register
         ref_deq_req_r1 = tr.deq_req;  // sample input
@@ -618,13 +624,20 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // RTL writes to pck_len_buffer in WRITE_HEADER state regardless of wr_en
         if (write_state == WRITE_HEADER) begin
             // Use RTL logic exactly: pck_len_r2 = (pck_len_valid_r1) ? pck_len_i_r1 : ((in_sop_r1) ? wr_data_r1[11:0] : packet_length)
+            // CRITICAL: These _r1 values contain the PREVIOUS cycle's values (when in_sop=1, pck_len_valid=1)
             bit [11:0] pck_len_r2_value;
             if (ref_pck_len_valid_r1) begin
                 pck_len_r2_value = ref_pck_len_i_r1;
+                `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using pck_len_i_r1=%0d (pck_len_valid_r1=1)", 
+                         $time, ref_pck_len_i_r1), UVM_LOW)
             end else if (ref_in_sop_r1) begin
                 pck_len_r2_value = ref_wr_data_r1[11:0];
+                `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using wr_data_r1[11:0]=%0d (in_sop_r1=1)", 
+                         $time, ref_wr_data_r1[11:0]), UVM_LOW)
             end else begin
                 pck_len_r2_value = ref_packet_length_w;  // Keep previous value
+                `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using prev_packet_length=%0d (both conditions false)", 
+                         $time, ref_packet_length_w), UVM_LOW)
             end
             
             // Write to packet length buffer (matching RTL pck_len_wr_en = 1'b1 in WRITE_HEADER)
