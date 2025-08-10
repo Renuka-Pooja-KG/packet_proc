@@ -190,6 +190,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: Processing with states - WRITE: %0d, READ: %0d", 
                  $time, write_state, read_state), UVM_LOW)
         
+        // CRITICAL FIX: Update ref_wr_lvl at the BEGINNING of the cycle (matching RTL always_ff behavior)
+        // This uses the ref_wr_lvl_next calculated in the PREVIOUS cycle
+        if (ref_wr_lvl != ref_wr_lvl_next) begin
+            `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: ref_wr_lvl updated from %0d to %0d (matching RTL clock edge behavior)", 
+                     $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
+        end
+        ref_wr_lvl = ref_wr_lvl_next;
+        
         // Apply one-cycle delay FIRST (use previous cycle's values for comparison)
         ref_buffer_empty_delayed = ref_buffer_empty;
         
@@ -417,12 +425,13 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_deq_req_r  = ref_deq_req_r1; // registered output (1-cycle delayed)
         ref_empty_de_assert = tr.empty_de_assert;
         
-        // Update write level (matching RTL always_ff behavior - updates on clock edge)
-        ref_wr_lvl = ref_wr_lvl_next;
+        // CRITICAL FIX: Do NOT update ref_wr_lvl here - it should update on NEXT cycle like RTL
+        // The RTL wr_lvl updates on the NEXT clock edge, not the current one
+        // ref_wr_lvl = ref_wr_lvl_next;  // REMOVED - this was causing 1-cycle ahead behavior
         
-        // Debug write level update
-        `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: ref_wr_lvl updated from %0d to %0d (matching RTL clock edge behavior)", 
-                 $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
+        // Debug write level timing
+        `uvm_info("WR_LVL_TIMING", $sformatf("Time=%0t: ref_wr_lvl_next=%0d calculated, but ref_wr_lvl=%0d NOT updated yet (matching RTL always_ff timing)", 
+                 $time, ref_wr_lvl_next, ref_wr_lvl), UVM_LOW)
     endfunction
 
     function void compute_write_next_state(pkt_proc_seq_item tr);
