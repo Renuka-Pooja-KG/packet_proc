@@ -180,6 +180,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_reference_model(pkt_proc_seq_item tr);
+        // Debug current states being processed
+        `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: Processing with states - WRITE: %0d, READ: %0d", 
+                 $time, write_state, read_state), UVM_LOW)
+        
         // Apply one-cycle delay FIRST (use previous cycle's values for comparison)
         ref_buffer_empty_delayed = ref_buffer_empty;
         
@@ -195,6 +199,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Compute read next-state from present state and registered inputs (like RTL always_comb);
         // advance at end of cycle after outputs are derived from present state
         compute_read_next_state(tr);
+        
+        // Debug next states computed
+        `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: Next states computed - WRITE: %0d -> %0d, READ: %0d -> %0d", 
+                 $time, write_state, write_state_next, read_state, read_state_next), UVM_LOW)
         
         // Generate write/read enables FIRST (matching RTL order)
         generate_write_read_enables(tr);
@@ -234,6 +242,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         update_outputs(tr);
 
         // Advance PRESENT states to NEXT after outputs (mirror RTL clocked state update)
+        if (write_state != write_state_next) begin
+            `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM ADVANCE: %0d -> %0d", 
+                     $time, write_state, write_state_next), UVM_LOW)
+        end
+        if (read_state != read_state_next) begin
+            `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM ADVANCE: %0d -> %0d", 
+                     $time, read_state, read_state_next), UVM_LOW)
+        end
         write_state = write_state_next;
         read_state  = read_state_next;
     endfunction
@@ -241,6 +257,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     function void handle_reset_logic(pkt_proc_seq_item tr);
         // Asynchronous active-low reset (highest priority)
         if (!tr.pck_proc_int_mem_fsm_rstn) begin
+            `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: ASYNC RESET: Resetting all states to IDLE", $time), UVM_LOW)
             // Reset all state machines and registers
             write_state = IDLE_W;
             read_state = IDLE_R;
@@ -297,6 +314,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Synchronous active-high software reset (second priority)
         if (tr.pck_proc_int_mem_fsm_sw_rstn) begin
+            `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: SYNC RESET: Resetting all states to IDLE", $time), UVM_LOW)
             // Reset all state machines and registers
             write_state = IDLE_W;
             read_state = IDLE_R;
@@ -385,6 +403,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             IDLE_W: begin
                 if (ref_enq_req_r && ref_in_sop_r1) begin
                     write_state_next = WRITE_HEADER;
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: IDLE_W -> WRITE_HEADER (enq_req=%0b, in_sop_r1=%0b)", 
+                             $time, ref_enq_req_r, ref_in_sop_r1), UVM_LOW)
                 end else begin
                     write_state_next = IDLE_W;
                 end
@@ -392,19 +412,29 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
             WRITE_HEADER: begin
                 if (ref_in_sop_r1) begin
-                    write_state_next = WRITE_HEADER;  // Stay in header
+                    write_state_next = WRITE_HEADER;
                 end else if (is_packet_invalid(tr)) begin
                     write_state_next = ERROR;
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> ERROR (packet invalid)", $time), UVM_LOW)
                 end else begin
                     write_state_next = WRITE_DATA;
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_DATA (valid packet)", $time), UVM_LOW)
+                end
+                // Update write-path packet length when header is written
+                if (ref_enq_req_r && !ref_packet_drop) begin // Only update if not dropping
+                    ref_packet_length_w = (ref_pck_len_valid_r1) ? ref_pck_len_i_r1 : ref_wr_data_r1[11:0];
                 end
             end
 
             WRITE_DATA: begin
                 if (ref_in_sop_r1 && ref_enq_req_r) begin
                     write_state_next = WRITE_HEADER;  // New packet
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_DATA -> WRITE_HEADER (new packet: in_sop_r1=%0b, enq_req_r=%0b)", 
+                             $time, ref_in_sop_r1, ref_enq_req_r), UVM_LOW)
                 end else if (ref_in_eop_r1 && !ref_in_sop_r1 && !ref_enq_req_r) begin
                     write_state_next = IDLE_W;  // End of packet
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_DATA -> IDLE_W (end of packet: in_eop_r1=%0b, in_sop_r1=%0b, enq_req_r=%0b)", 
+                             $time, ref_in_eop_r1, ref_in_sop_r1, ref_enq_req_r), UVM_LOW)
                 end else begin
                     write_state_next = WRITE_DATA;  // Continue data
                 end
@@ -412,6 +442,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
             ERROR: begin
                 write_state_next = IDLE_W;  // Return to idle
+                `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: ERROR -> IDLE_W (return to idle)", $time), UVM_LOW)
             end
         endcase
     endfunction
@@ -421,6 +452,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             IDLE_R: begin
                 if (ref_deq_req_r && !ref_buffer_empty) begin
                     read_state_next = READ_HEADER;
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: IDLE_R -> READ_HEADER (deq_req_r=%0b, buffer_empty=%0b)", 
+                             $time, ref_deq_req_r, ref_buffer_empty), UVM_LOW)
                 end else begin
                     read_state_next = IDLE_R;
                 end
@@ -428,15 +461,21 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
             READ_HEADER: begin
                 read_state_next = READ_DATA;
+                `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_HEADER -> READ_DATA (advance to data)", $time), UVM_LOW)
             end
 
             READ_DATA: begin
                 if (ref_buffer_empty) begin
                     read_state_next = IDLE_R;
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_DATA -> IDLE_R (buffer empty)", $time), UVM_LOW)
                 end else if ((ref_count_r == (ref_packet_length - 1)) && ref_deq_req_r) begin
                     read_state_next = READ_HEADER;  // Next packet
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_DATA -> READ_HEADER (next packet: count_r=%0d, pck_len=%0d, deq_req_r=%0b)", 
+                             $time, ref_count_r, ref_packet_length, ref_deq_req_r), UVM_LOW)
                 end else if ((ref_count_r == (ref_packet_length - 1)) && !ref_deq_req_r) begin
                     read_state_next = IDLE_R;  // End of packet
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_DATA -> IDLE_R (end of packet: count_r=%0d, pck_len=%0d, deq_req_r=%0b)", 
+                             $time, ref_count_r, ref_packet_length, ref_deq_req_r), UVM_LOW)
                 end else begin
                     read_state_next = READ_DATA;  // Continue reading
                 end
