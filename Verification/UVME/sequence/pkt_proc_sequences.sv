@@ -127,13 +127,10 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     end
 
     for (int i = 0; i < pkt_length; i++) begin
-      string tr_name;
-      if (i == 0)
-        tr_name = "tr_sop";
-      else if (i == pkt_length-1)
-        tr_name = "tr_eop";
-      else
-        tr_name = $sformatf("tr_data_%0d", i);
+      // Calculate packet control signals before transaction creation
+      bit is_sop = (i == 0);
+      bit is_eop = (i == pkt_length-1);
+      string tr_name = is_sop ? "tr_sop" : (is_eop ? "tr_eop" : $sformatf("tr_data_%0d", i));
 
       tr = pkt_proc_seq_item::type_id::create(tr_name);
       start_item(tr);
@@ -142,10 +139,10 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       tr.empty_de_assert = 1'b0;
       tr.enq_req = 1'b1;
       tr.deq_req = 1'b0;
-      tr.in_sop = (i == 0) ? 1'b1 : 1'b0;
-      tr.in_eop = (i == pkt_length-1) ? 1'b1 : 1'b0;
+      tr.in_sop = is_sop;
+      tr.in_eop = is_eop;
       tr.wr_data_i = base_data + i;
-      tr.pck_len_valid = (i == 0) ? 1'b1 : 1'b0;
+      tr.pck_len_valid = is_sop;
       tr.pck_len_i = pkt_length[11:0];
       tr.pck_proc_almost_full_value = almost_full_value;
       tr.pck_proc_almost_empty_value = almost_empty_value;
