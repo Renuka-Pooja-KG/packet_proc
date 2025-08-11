@@ -74,7 +74,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     // Write level tracking (matching RTL's always_ff behavior)
     bit [14:0] ref_wr_lvl_next;     // Next cycle's wr_lvl value (15 bits: [ADDR_WIDTH:0])
     bit ref_overflow;               // Internal overflow signal (matching int_buffer_top)
-    bit ref_overflow_prev;          // Previous cycle's overflow
+            bit ref_overflow_prev;          // Previous cycle's overflow
+        bit ref_reset_active;              // Flag to track if reset is currently active
     
 
     
@@ -163,6 +164,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Initialize delayed signals
         ref_buffer_empty_delayed = 1;
         
+        // Initialize reset flag
+        ref_reset_active = 0;
+        
         // Initialize temporary variables
         temp_full = 0;
         temp_empty = 0;
@@ -187,11 +191,22 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // CRITICAL FIX: Update ref_wr_lvl at the BEGINNING of the cycle (matching RTL always_ff behavior)
         // This uses the ref_wr_lvl_next calculated in the PREVIOUS cycle
-        if (ref_wr_lvl != ref_wr_lvl_next) begin
-            `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: ref_wr_lvl updated from %0d to %0d (matching RTL clock edge behavior)", 
-                     $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
+        // UNLESS reset is active - then respond immediately like DUT
+        if (!tr.pck_proc_int_mem_fsm_rstn) begin
+            // ASYNC RESET: Immediately set wr_lvl to 0 (matching DUT behavior)
+            if (ref_wr_lvl != 0) begin
+                `uvm_info("WR_LVL_RESET", $sformatf("Time=%0t: ASYNC RESET: ref_wr_lvl immediately set to 0 (matching DUT async reset)", 
+                         $time), UVM_LOW)
+            end
+            ref_wr_lvl = 0;
+        end else begin
+            // Normal operation: Update from previous cycle's calculation
+            if (ref_wr_lvl != ref_wr_lvl_next) begin
+                `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: ref_wr_lvl updated from %0d to %0d (matching RTL clock edge behavior)", 
+                         $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
+            end
+            ref_wr_lvl = ref_wr_lvl_next;
         end
-        ref_wr_lvl = ref_wr_lvl_next;
         
         // Apply one-cycle delay FIRST (use previous cycle's values for comparison)
         ref_buffer_empty_delayed = ref_buffer_empty;
@@ -275,6 +290,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Asynchronous active-low reset (highest priority)
         if (!tr.pck_proc_int_mem_fsm_rstn) begin
             `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: ASYNC RESET: Resetting all states to IDLE", $time), UVM_LOW)
+            // Set reset active flag (matching DUT async reset behavior)
+            ref_reset_active = 1;
+            
             // Reset all state machines and registers
             write_state = IDLE_W;
             read_state = IDLE_R;
@@ -330,9 +348,18 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             return; // Exit early - no further processing during reset
         end
         
+        // Check if reset was just de-asserted (transition from reset to normal operation)
+        if (ref_reset_active && tr.pck_proc_int_mem_fsm_rstn) begin
+            `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: RESET DE-ASSERTED: Returning to normal operation", $time), UVM_LOW)
+            ref_reset_active = 0;
+        end
+        
         // Synchronous active-high software reset (second priority)
         if (tr.pck_proc_int_mem_fsm_sw_rstn) begin
             `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: SYNC RESET: Resetting all states to IDLE", $time), UVM_LOW)
+            // Set reset active flag for software reset
+            ref_reset_active = 1;
+            
             // Reset all state machines and registers
             write_state = IDLE_W;
             read_state = IDLE_R;
@@ -386,6 +413,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_wr_lvl_next = 0;
             
             return; // Exit early - no further processing during reset
+        end
+        
+        // Check if software reset was just de-asserted
+        if (ref_reset_active && !tr.pck_proc_int_mem_fsm_sw_rstn) begin
+            `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: SOFTWARE RESET DE-ASSERTED: Returning to normal operation", $time), UVM_LOW)
+            ref_reset_active = 0;
         end
     endfunction
 
@@ -713,23 +746,31 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_write_level_next();
-        // Write level logic (matching RTL always_ff exactly):
-        // RTL calculates based on CURRENT cycle enables and CURRENT buffer states
-        if (ref_packet_drop) begin
-            ref_wr_lvl_next = ref_wr_lvl - ref_count_w;
-        end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_overflow)) begin
-            ref_wr_lvl_next = ref_wr_lvl;  // No change
-        end else if (ref_wr_en && !ref_buffer_full) begin
-            ref_wr_lvl_next = ref_wr_lvl + 1;
-        end else if (ref_rd_en && !ref_buffer_empty) begin
-            ref_wr_lvl_next = ref_wr_lvl - 1;
+        // CRITICAL FIX: Check for reset first - if reset is active, don't calculate wr_lvl_next
+        // This prevents the scoreboard from calculating new values during reset
+        if (!ref_reset_active) begin
+            // Write level logic (matching RTL always_ff exactly):
+            // RTL calculates based on CURRENT cycle enables and CURRENT buffer states
+            if (ref_packet_drop) begin
+                ref_wr_lvl_next = ref_wr_lvl - ref_count_w;
+            end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_overflow)) begin
+                ref_wr_lvl_next = ref_wr_lvl;  // No change
+            end else if (ref_wr_en && !ref_buffer_full) begin
+                ref_wr_lvl_next = ref_wr_lvl + 1;
+            end else if (ref_rd_en && !ref_buffer_empty) begin
+                ref_wr_lvl_next = ref_wr_lvl - 1;
+            end else begin
+                ref_wr_lvl_next = ref_wr_lvl;  // No change
+            end
+            
+            // Debug wr_lvl calculation details
+            `uvm_info("WR_LVL_DEBUG", $sformatf("wr_lvl_next calc: wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, overflow=%0b, current_wr_lvl=%0d, next_wr_lvl=%0d", 
+                     ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_overflow, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
         end else begin
-            ref_wr_lvl_next = ref_wr_lvl;  // No change
+            // Reset is active: keep wr_lvl_next at 0 (matching DUT behavior)
+            ref_wr_lvl_next = 0;
+            `uvm_info("WR_LVL_DEBUG", $sformatf("RESET ACTIVE: ref_wr_lvl_next kept at 0 (matching DUT reset behavior)", $time), UVM_LOW)
         end
-        
-        // Debug wr_lvl calculation details
-        `uvm_info("WR_LVL_DEBUG", $sformatf("wr_lvl_next calc: wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, overflow=%0b, current_wr_lvl=%0d, next_wr_lvl=%0d", 
-                 ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_overflow, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
     endfunction
 
     function void update_internal_overflow();
