@@ -896,7 +896,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
         in_eop == 1'b0;        // Not end of packet
         wr_data_i == 32'hD001 + i;
         pck_len_valid == 1'b0;
-        pck_len_i == 12'h0000;
+        pck_len_i == 12'h0005;
       });
       finish_item(tr);
       send_idle_transaction(1);
@@ -918,7 +918,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       in_eop == 1'b0;        // Not end of packet (INVALID - should be 1 when count_w reaches limit!)
       wr_data_i == 32'hD004;
       pck_len_valid == 1'b0;
-      pck_len_i == 12'h0000;
+      pck_len_i == 12'h0005;
     });
     finish_item(tr);
     

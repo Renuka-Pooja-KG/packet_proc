@@ -47,26 +47,26 @@ class pkt_proc_seq_item extends uvm_sequence_item;
 //   typedef enum {WRITE_OP, READ_OP, BOTH_OP} operation_type_e;
 //   rand operation_type_e op_type;
 
-  // Write-specific constraints
-  constraint write_protocol_constraints {
-    // No enq_req when overflow or full
-    (pck_proc_overflow || pck_proc_full) -> enq_req == 0;
+  // // Write-specific constraints
+  // constraint write_protocol_constraints {
+  //   // No enq_req when overflow or full
+  //   (pck_proc_overflow || pck_proc_full) -> enq_req == 0;
     
-    // No in_sop and in_eop high at same time
-    !(in_sop && in_eop);
+  //   // No in_sop and in_eop high at same time
+  //   !(in_sop && in_eop);
     
-    // Packet length must be greater than 1 when valid
-    (in_sop && pck_len_valid) -> pck_len_i > 1;
+  //   // Packet length must be greater than 1 when valid
+  //   (in_sop && pck_len_valid) -> pck_len_i > 1;
     
-    // When pck_len_valid is high, pck_len_i should be reasonable
-    pck_len_valid -> pck_len_i inside {[2:4095]};
+  //   // When pck_len_valid is high, pck_len_i should be reasonable
+  //   pck_len_valid -> pck_len_i inside {[2:4095]};
     
-    // When in_sop is high, pck_len_valid should typically be high
-    in_sop -> pck_len_valid dist {1 := 80, 0 := 20};
+  //   // When in_sop is high, pck_len_valid should typically be high
+  //   in_sop -> pck_len_valid dist {1 := 80, 0 := 20};
     
-    // Ensure empty_de_assert is always disabled
-    empty_de_assert == 1'b0;
-  }
+  //   // Ensure empty_de_assert is always disabled
+  //   empty_de_assert == 1'b0;
+  // }
 
   // Read-specific constraints
   constraint read_protocol_constraints {
