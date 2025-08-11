@@ -45,8 +45,8 @@ class reset_test extends uvm_test;
     `uvm_info(get_type_name(), "Test 3: Apply async reset", UVM_LOW)
     // seq.scenario = 10;  // Async reset scenario
     // seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
-    send_reset_transaction(1'b1, 1'b1, 5);  // async_rst=1, sync_rst=1 for clean start
-    send_reset_transaction(1'b1, 1'b1, 3);  // Release sync reset
+    seq.send_reset_transaction(1'b1, 1'b1, 5);  // async_rst=1, sync_rst=1 for clean start
+    seq.send_reset_transaction(1'b1, 1'b1, 3);  // Release sync reset
     
     // Add idle cycles after reset
     seq.send_idle_transaction(5);
