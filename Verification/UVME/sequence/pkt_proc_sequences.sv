@@ -358,15 +358,17 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 1: Fill buffer to near capacity with large packets
     `uvm_info(get_type_name(), "Phase 1: Filling buffer to near capacity", UVM_LOW)
-    for (int pkt = 0; pkt < 100; pkt++) begin
+    for (int pkt = 0; pkt < 16; pkt++) begin
       // Each packet: 1 header + 1000 data beats = 1001 beats × 32 bits = 32,032 bits = 4,004 bytes
-      // 100 packets × 4,004 bytes = 400,400 bytes >> 16,384 bytes (buffer capacity)
+      // 16 packets × 4,004 bytes = 64,064 bytes (just under buffer capacity of 65,536 bytes)
+      // Remaining capacity: 1,472 bytes
       write_packet(1000, 32'hE000 + pkt);
       send_idle_transaction(1);  // Small gap to prevent backpressure issues
     end
     
     // Phase 2: Write one more packet to trigger overflow
     `uvm_info(get_type_name(), "Phase 2: Writing one packet to trigger overflow", UVM_LOW)
+    // This packet (4,004 bytes) will overflow the remaining 1,472 bytes by 2,532 bytes
     write_packet(1000, 32'hF000);
     
     // Phase 3: Wait for overflow to be detected and packet drop to occur
