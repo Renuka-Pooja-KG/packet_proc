@@ -33,6 +33,9 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   int max_packet_length = 16;
   int current_packet_length;
   int current_packet_word_count;
+
+  bit [11:0] remaining_beats = 0;
+  bit [7:0] packet_id = 0;
   
   // Transaction handle
   pkt_proc_seq_item tr;
@@ -230,21 +233,113 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     read_data(num_transactions);
   endtask
 
-  // Concurrent read/write scenario
+  // Concurrent read/write scenario - Technically correct implementation
   task concurrent_rw_scenario();
     initialize_dut();
     
-    `uvm_info(get_type_name(), $sformatf("Starting concurrent R/W scenario"), UVM_LOW)
+    `uvm_info(get_type_name(), $sformatf("Starting technically correct concurrent R/W scenario"), UVM_LOW)
     
-    // Write some packets first
-    for (int pkt = 0; pkt < 3; pkt++) begin
+    // Phase 1: Write initial packets to build up buffer level
+    `uvm_info(get_type_name(), "Phase 1: Writing initial packets to build buffer level", UVM_LOW)
+    for (int pkt = 0; pkt < 5; pkt++) begin
       current_packet_length = $urandom_range(4, 8);
       write_packet(current_packet_length, 32'hB000 + (pkt << 8));
     end
     
-    // Then do concurrent operations
+    // Add idle cycles to ensure writes complete
+    send_idle_transaction(3);
+    
+    // Phase 2: Controlled concurrent operations with proper packet boundaries
+    `uvm_info(get_type_name(), "Phase 2: Controlled concurrent R/W operations", UVM_LOW)
+    bit [11:0] remaining_beats = 0;
+    bit [7:0] packet_id = 0;
+    
     repeat (num_transactions) begin
       tr = pkt_proc_seq_item::type_id::create("tr_concurrent");
+      start_item(tr);
+      
+      // Ensure proper packet boundaries and valid operations
+      if (remaining_beats == 0) begin
+        // Start of new packet
+        assert(tr.randomize() with {
+          pck_proc_int_mem_fsm_rstn == 1'b1;
+          pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+          empty_de_assert == 1'b0;
+          pck_proc_almost_full_value == local::almost_full_value;
+          pck_proc_almost_empty_value == local::almost_empty_value;
+          enq_req == 1'b1;
+          deq_req == 1'b1;
+          in_sop == 1'b1;   
+          wr_data_i == 32'h0005;        // Start of packet
+          in_eop == 1'b0;           // Not end of packet
+          pck_len_valid == 1'b1;    // Valid packet length
+          pck_len_i == 12'h0005; // Reasonable packet length
+        });
+        remaining_beats = tr.pck_len_i;
+        packet_id++;
+        `uvm_info(get_type_name(), $sformatf("Starting packet %0d with length %0d", packet_id, remaining_beats), UVM_LOW)
+      end else if (remaining_beats == 1) begin
+        // End of current packet
+        assert(tr.randomize() with {
+          pck_proc_int_mem_fsm_rstn == 1'b1;
+          pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+          empty_de_assert == 1'b0;
+          pck_proc_almost_full_value == local::almost_full_value;
+          pck_proc_almost_empty_value == local::almost_empty_value;
+          enq_req == 1'b1;
+          deq_req == 1'b1;
+          in_sop == 1'b0;           // Not start of packet
+          in_eop == 1'b1;           // End of packet
+          pck_len_valid == 1'b0;    // No new packet length
+          pck_len_i == 12'h0005;       // Not used for end of packet
+        });
+        remaining_beats = 0;        // Reset for next packet
+        `uvm_info(get_type_name(), $sformatf("Completed packet %0d", packet_id), UVM_LOW)
+      end else begin
+        // Middle of packet
+        assert(tr.randomize() with {
+          pck_proc_int_mem_fsm_rstn == 1'b1;
+          pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+          empty_de_assert == 1'b0;
+          pck_proc_almost_full_value == local::almost_full_value;
+          pck_proc_almost_empty_value == local::almost_empty_value;
+          enq_req == 1'b1;
+          deq_req == 1'b1;
+          in_sop == 1'b0;           // Not start of packet
+          in_eop == 1'b0;           // Not end of packet
+          pck_len_valid == 1'b0;    // No new packet length
+          pck_len_i == 12'h0;       // Not used for middle of packet
+        });
+        remaining_beats--;           // Decrement remaining beats
+      end
+      
+      finish_item(tr);
+    end
+    
+    // Phase 3: Complete any remaining packet
+    if (remaining_beats > 0) begin
+      `uvm_info(get_type_name(), $sformatf("Phase 3: Completing remaining packet with %0d beats", remaining_beats), UVM_LOW)
+      repeat (remaining_beats) begin
+        tr = pkt_proc_seq_item::type_id::create("tr_complete");
+        start_item(tr);
+        assert(tr.randomize() with {
+          pck_proc_int_mem_fsm_rstn == 1'b1;
+          pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+          empty_de_assert == 1'b0;
+          pck_proc_almost_full_value == local::almost_full_value;
+          pck_proc_almost_empty_value == local::almost_empty_value;
+          enq_req == 1'b1;
+          deq_req == 1'b1;
+          in_sop == 1'b0;
+          in_eop == 1'b0;
+          pck_len_valid == 1'b0;
+          pck_len_i == 12'h0;
+        });
+        finish_item(tr);
+      end
+      
+      // Final end of packet
+      tr = pkt_proc_seq_item::type_id::create("tr_final_eop");
       start_item(tr);
       assert(tr.randomize() with {
         pck_proc_int_mem_fsm_rstn == 1'b1;
@@ -254,12 +349,19 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
         pck_proc_almost_empty_value == local::almost_empty_value;
         enq_req == 1'b1;
         deq_req == 1'b1;
+        in_sop == 1'b0;
+        in_eop == 1'b1;
+        pck_len_valid == 1'b0;
+        pck_len_i == 12'h0;
       });
       finish_item(tr);
     end
-
+    
+    // Phase 4: Clean up with idle cycles
+    `uvm_info(get_type_name(), "Phase 4: Cleanup with idle cycles", UVM_LOW)
     send_idle_transaction(5);
     
+    `uvm_info(get_type_name(), $sformatf("Concurrent R/W scenario completed with %0d packets", packet_id), UVM_LOW)
   endtask
 
   // Packet write scenario with structured packets
