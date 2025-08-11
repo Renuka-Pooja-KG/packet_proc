@@ -696,9 +696,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                      $time, pck_len_r2_value, ref_pck_len_valid_r1, ref_in_sop_r1, ref_pck_len_i_r1, ref_wr_data_r1[11:0], ref_packet_length_w), UVM_LOW)
         end
         
-        // CRITICAL FIX: Read operations should update based on CURRENT cycle deq_req (matching DUT behavior)
+        // CRITICAL FIX: Read operations should update based on CURRENT cycle deq_req AND correct FSM states
         // This prevents ref_rd_data from being 1 cycle behind the DUT's rd_data_o
-        if (tr.deq_req && !ref_buffer_empty) begin
+        // Only update when in READ_HEADER or READ_DATA states (matching RTL behavior)
+        if (tr.deq_req && !ref_buffer_empty && (read_state == READ_HEADER || read_state == READ_DATA)) begin
             ref_rd_data_o = ref_buffer[ref_rd_ptr[13:0]];
             ref_rd_ptr = ref_rd_ptr + 1;
             // NOTE: Do not increment ref_count_r here; count is driven by FSM on deq_req_r
