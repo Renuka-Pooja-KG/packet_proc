@@ -656,7 +656,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                  $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, tr.in_sop, ref_in_eop_r1, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), tr.in_eop, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), tr.in_eop, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
 
         // pck_invalid = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) && enq_req
-        if (tr.enq_req && (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6)) begin
+        if (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) begin
             `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: pck_invalid: enq_req=1, state=%0d, invalid_1=%0b, invalid_3=%0b, invalid_4=%0b, invalid_5=%0b, invalid_6=%0b, count_w=%0d, pck_len_w=%0d, in_sop_r1=%0b, in_eop_r1=%0b",
                      $time, write_state, invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, ref_count_w, ref_packet_length_w, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
             
