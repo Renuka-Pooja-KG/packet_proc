@@ -89,6 +89,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       start_item(tr);
       tr.pck_proc_int_mem_fsm_rstn = async_rstn;
       tr.pck_proc_int_mem_fsm_sw_rstn = sync_rstn;
+      tr.pck_proc_almost_full_value = 5'd28;
+      tr.pck_proc_almost_empty_value = 5'd4;
       // All other fields can take any value (left unassigned)
       finish_item(tr);
     end
