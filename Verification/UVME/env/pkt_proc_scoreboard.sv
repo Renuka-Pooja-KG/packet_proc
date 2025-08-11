@@ -643,7 +643,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // CRITICAL FIX: invalid_5 should check CURRENT cycle in_eop, not previous cycle in_eop_r1
         // This prevents false packet drops when a packet legitimately completes
         bit invalid_5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~tr.in_eop) && (write_state == WRITE_DATA));
-        bit invalid_6 = tr.enq_req && tr.pck_proc_overflow;
+        // CRITICAL FIX: invalid_6 should detect overflow immediately when buffer is full and write is attempted
+        // This ensures pck_invalid is detected in the same cycle as the DUT, without circular dependency
+        // invalid_6 = (enq_req && buffer_full) - immediate overflow detection
+        bit invalid_6 = tr.enq_req && ref_buffer_full_prev2;
 
         // Debug: Show condition calculations that use ref_packet_length_w
         `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop=%0b && in_eop=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r1=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
@@ -658,6 +661,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             if (invalid_4) begin
                 `uvm_info("INVALID_4_DEBUG", $sformatf("Time=%0t: INVALID_4 triggered: state=%0d, count_w=%0d < (pck_len_w-1)=%0d && pck_len_w!=0=%0b && in_eop=%0b", 
                          $time, write_state, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), tr.in_eop), UVM_LOW)
+            end
+            
+            // Additional debug for invalid_6 specifically
+            if (invalid_6) begin
+                `uvm_info("INVALID_6_DEBUG", $sformatf("Time=%0t: INVALID_6 triggered: enq_req=%0b && buffer_full_prev2=%0b (immediate overflow detection)", 
+                         $time, tr.enq_req, ref_buffer_full_prev2), UVM_LOW)
             end
             
             ref_packet_drop = 1;
