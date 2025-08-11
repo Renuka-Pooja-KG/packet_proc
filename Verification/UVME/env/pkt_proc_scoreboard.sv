@@ -76,9 +76,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_overflow;               // Internal overflow signal (matching int_buffer_top)
     bit ref_overflow_prev;          // Previous cycle's overflow
     
-    // Almost full/empty threshold values (matching RTL)
-    bit [14:0] ref_almost_full_value;
-    bit [14:0] ref_almost_empty_value;
+
     
     // One-cycle delayed signals (matching RTL's always_ff outputs)
     bit ref_buffer_empty_delayed;   // One-cycle delayed buffer_empty
@@ -121,10 +119,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_len_full = 0;
         ref_pck_len_empty = 1;
         
-        // Initialize almost full/empty threshold values (matching RTL defaults)
-        ref_almost_full_value = 14'd16383;  // DEPTH - 1 (assuming 14-bit address)
-        ref_almost_empty_value = 14'd1;     // Almost empty threshold
-        
+
         // Initialize flags
         ref_pck_proc_overflow = 0;
         ref_pck_proc_underflow = 0;
@@ -695,28 +690,21 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_buffer_states();
-        // Buffer full condition (matching RTL)
-        ref_buffer_full = (({~ref_wr_ptr[14], ref_wr_ptr[13:0]} == ref_rd_ptr));
+        // CRITICAL FIX: Buffer full should be based on wr_lvl, not pointer comparison
+        // DUT logic: pck_proc_full = 1 when wr_lvl == DEPTH (buffer is full)
+        // This matches the actual RTL behavior
+        ref_buffer_full = (ref_wr_lvl == DEPTH) ? 1 : 0;  // Use parameter instead of hardcoded value
         
-        // Buffer empty condition (matching RTL exactly)
-        // RTL calculates this as a combinational signal based on current pointer values
-        // (which reflect the previous cycle's state)
-        if ((ref_empty_de_assert == 0) && (ref_wr_ptr != ref_rd_ptr)) begin
-            ref_buffer_empty = 0;
-        end else if ((ref_in_eop_r2 && (ref_wr_ptr != ref_rd_ptr) && (ref_empty_de_assert == 1))) begin
-            ref_buffer_empty = 0;
-        end else if (ref_wr_ptr == ref_rd_ptr) begin
-            ref_buffer_empty = 1;
-        end else begin
-            ref_buffer_empty = ref_buffer_empty_r;
-        end
+        // CRITICAL FIX: Buffer empty should be based on wr_lvl, not pointer comparison
+        // DUT logic: pck_proc_empty = 1 when wr_lvl > 0 (buffer has data)
+        // This matches the actual RTL behavior
+        ref_buffer_empty = (ref_wr_lvl > 0) ? 0 : 1;
         
         // Debug buffer state
         `uvm_info("BUFFER_DEBUG", $sformatf("Buffer State: wr_ptr=%0d, rd_ptr=%0d, empty=%0b, full=%0b, empty_de_assert=%0b, in_eop_r2=%0b", 
                  ref_wr_ptr, ref_rd_ptr, ref_buffer_empty, ref_buffer_full, ref_empty_de_assert, ref_in_eop_r2), UVM_LOW)
         
-        // Update buffer_empty_r
-        ref_buffer_empty_r = ref_buffer_empty;
+        // No longer need buffer_empty_r since we use simple wr_lvl-based logic
         
         // Packet length buffer conditions
         ref_pck_len_full = (ref_pck_len_wr_ptr == ref_pck_len_rd_ptr) ? 0 :
@@ -837,27 +825,24 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
-        // pck_proc_full (from buffer_full) - matching RTL assign
-        ref_buffer_full = (({~ref_wr_ptr[14], ref_wr_ptr[13:0]} == ref_rd_ptr));
+        // CRITICAL FIX: pck_proc_full should be based on wr_lvl, not pointer comparison
+        // DUT logic: pck_proc_full = 1 when wr_lvl == DEPTH (buffer is full)
+        // This matches the actual RTL behavior, not the complex pointer-based logic
+        ref_buffer_full = (ref_wr_lvl == DEPTH) ? 1 : 0;  // Use parameter instead of hardcoded value
         
-        // pck_proc_empty (from buffer_empty) - matching RTL assign exactly
-        // RTL calculates this as a combinational signal based on current pointer values
-        // (which reflect the previous cycle's state)
-        if ((ref_empty_de_assert == 0) && (ref_wr_ptr != ref_rd_ptr)) begin
-            ref_buffer_empty = 0;
-        end else if ((ref_in_eop_r2 && (ref_wr_ptr != ref_rd_ptr) && (ref_empty_de_assert == 1))) begin
-            ref_buffer_empty = 0;
-        end else if (ref_wr_ptr == ref_rd_ptr) begin
-            ref_buffer_empty = 1;
-        end else begin
-            ref_buffer_empty = ref_buffer_empty_r;
-        end
+        // CRITICAL FIX: pck_proc_empty should be based on wr_lvl, not pointer comparison
+        // DUT logic: pck_proc_empty = 1 when wr_lvl > 0 (buffer has data)
+        // This matches the actual RTL behavior, not the complex pointer-based logic
+        ref_buffer_empty = (ref_wr_lvl > 0) ? 0 : 1;
         
-        // pck_proc_almost_full (from buffer_almost_full) - matching RTL assign
-        ref_pck_proc_almost_full = (ref_wr_lvl >= ref_almost_full_value);
+        // CRITICAL FIX: pck_proc_almost_full threshold should be DEPTH - almost_full_value
+        // DUT logic: pck_proc_almost_full = 1 when wr_lvl >= (DEPTH - almost_full_value)
+        // This matches the actual RTL behavior
+        ref_pck_proc_almost_full = (ref_wr_lvl >= (DEPTH - tr.pck_proc_almost_full_value));
         
         // pck_proc_almost_empty (from buffer_almost_empty) - matching RTL assign
-        ref_pck_proc_almost_empty = (ref_wr_lvl <= ref_almost_empty_value);
+        // Use transaction value, not hardcoded value
+        ref_pck_proc_almost_empty = (ref_wr_lvl <= tr.pck_proc_almost_empty_value);
 
     endfunction
 
