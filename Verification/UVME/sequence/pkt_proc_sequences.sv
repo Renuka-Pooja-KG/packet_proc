@@ -62,6 +62,10 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       12: dual_reset_scenario();
       13: reset_during_packet_scenario();
       14: reset_during_read_scenario();
+      15: invalid_1_scenario();
+      16: invalid_3_scenario();
+      17: invalid_4_scenario();
+      18: invalid_5_scenario();
       default: random_scenario();
     endcase
     `uvm_info(get_type_name(), "pkt_proc_base_sequence completed", UVM_LOW)

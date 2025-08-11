@@ -8,31 +8,36 @@
 `ifndef INVALID_3_TEST_SV
 `define INVALID_3_TEST_SV
 
-class invalid_3_test extends base_test;
-    `uvm_component_utils(invalid_3_test)
+class invalid_3_test extends uvm_test;
+  `uvm_component_utils(invalid_3_test)
 
-    function new(string name, uvm_component parent);
-        super.new(name, parent);
-    endfunction
+  pkt_proc_env m_env;
+  pkt_proc_base_sequence seq;
 
-    function void build_phase(uvm_phase phase);
-        super.build_phase(phase);
-    endfunction
+  function new(string name = "invalid_3_test", uvm_component parent = null);
+    super.new(name, parent);
+  endfunction
 
-    task run_phase(uvm_phase phase);
-        phase.raise_objection(this);
-        
-        `uvm_info(get_type_name(), "Starting invalid_3 test - Testing in_sop && (~in_eop_r1) && (write_state == WRITE_DATA) condition", UVM_LOW)
-        `uvm_info(get_type_name(), "This tests starting a new packet while already processing another packet", UVM_LOW)
-        
-        // Run the invalid_3 scenario
-        seq.invalid_3_scenario();
-        
-        // Wait for all transactions to complete
-        phase.drop_objection(this);
-        
-        `uvm_info(get_type_name(), "Invalid_3 test completed", UVM_LOW)
-    endtask
+  function void build_phase(uvm_phase phase);
+    super.build_phase(phase);
+    m_env = pkt_proc_env::type_id::create("m_env", this);
+    seq = pkt_proc_base_sequence::type_id::create("seq");
+    `uvm_info(get_type_name(), "Invalid 3 test build_phase completed", UVM_LOW)
+  endfunction
+
+  task run_phase(uvm_phase phase);
+    phase.raise_objection(this);
+    
+    // Configure sequence for invalid 1 scenario (scenario = 15)
+    seq.invalid_3_scenario();  // Invalid 3 scenario    
+    `uvm_info(get_type_name(), $sformatf("Starting invalid 3 test with scenario %0d", seq.scenario), UVM_LOW)
+    
+    // Start the sequence
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
+    
+    `uvm_info(get_type_name(), "Invalid 3 test run_phase completed", UVM_LOW)
+    phase.drop_objection(this);
+  endtask
 
 endclass
 
