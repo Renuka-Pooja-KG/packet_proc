@@ -403,7 +403,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 3: Read some data to increment read level
     `uvm_info(get_type_name(), "Phase 3: Reading data to increment read level", UVM_LOW)
-    read_data(8);
+    read_data(10);
     
     // Phase 4: Assert sync reset while keeping async reset deasserted
     `uvm_info(get_type_name(), "Phase 4: Asserting sync reset (async reset deasserted)", UVM_LOW)
@@ -422,7 +422,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 7: Read data to verify read functionality
     `uvm_info(get_type_name(), "Phase 7: Reading data after sync reset", UVM_LOW)
-    read_data(8);
+    read_data(10);
     
     // Phase 8: Apply another sync reset
     `uvm_info(get_type_name(), "Phase 8: Applying second sync reset", UVM_LOW)
@@ -432,7 +432,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     // Phase 9: Final write/read sequence
     `uvm_info(get_type_name(), "Phase 9: Final write/read sequence", UVM_LOW)
     write_packet(6, 32'hF000);
-    read_data(8);
+    read_data(10);
     
     `uvm_info(get_type_name(), "Sync reset scenario completed", UVM_LOW)
   endtask
