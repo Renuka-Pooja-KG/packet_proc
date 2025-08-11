@@ -623,7 +623,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Use WRITE-PATH packet length for these checks
         bit invalid_1 = (tr.in_sop && tr.in_eop);
         bit invalid_3 = (tr.in_sop && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
-        bit invalid_4 = ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
+        // CRITICAL FIX: Only evaluate invalid_4 when we're actually ending a packet (not starting a new one)
+        // Check if we're in WRITE_DATA state (processing a packet) before evaluating invalid_4
+        // This prevents false packet drops when count_w=0 from previous packet completion
+        bit invalid_4 = (write_state == WRITE_DATA) && 
+                        ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
         // CRITICAL FIX: invalid_5 should check CURRENT cycle in_eop, not previous cycle in_eop_r1
         // This prevents false packet drops when a packet legitimately completes
         bit invalid_5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~tr.in_eop) && (write_state == WRITE_DATA));
@@ -640,8 +644,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             
             // Additional debug for invalid_4 specifically
             if (invalid_4) begin
-                `uvm_info("INVALID_4_DEBUG", $sformatf("Time=%0t: INVALID_4 triggered: count_w=%0d < (pck_len_w-1)=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b", 
-                         $time, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1), UVM_LOW)
+                `uvm_info("INVALID_4_DEBUG", $sformatf("Time=%0t: INVALID_4 triggered: state=%0d, count_w=%0d < (pck_len_w-1)=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b", 
+                         $time, write_state, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1), UVM_LOW)
             end
             
             ref_packet_drop = 1;
