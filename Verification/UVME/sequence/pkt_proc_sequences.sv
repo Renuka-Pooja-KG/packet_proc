@@ -252,11 +252,14 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
         empty_de_assert == 1'b0;
         pck_proc_almost_full_value == local::almost_full_value;
         pck_proc_almost_empty_value == local::almost_empty_value;
-        enq_req dist {1 := 30, 0 := 70};
-        deq_req dist {1 := 50, 0 := 50};
+        enq_req == 1'b1;
+        deq_req == 1'b1;
       });
       finish_item(tr);
     end
+
+    send_idle_transaction(5);
+    
   endtask
 
   // Packet write scenario with structured packets
