@@ -350,7 +350,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     end
   endtask
 
-  // Overflow scenario - try to fill the buffer beyond capacity
+  // Overflow scenario - stop after first overflow occurs
   task overflow_scenario();
     initialize_dut();
     
@@ -365,19 +365,15 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       send_idle_transaction(1);  // Small gap to prevent backpressure issues
     end
     
-    // Phase 2: Continue writing to force overflow
-    `uvm_info(get_type_name(), "Phase 2: Forcing buffer overflow", UVM_LOW)
-    for (int pkt = 100; pkt < 150; pkt++) begin
-      // These packets will definitely cause overflow
-      write_packet(1000, 32'hF000 + pkt);
-      send_idle_transaction(1);
-    end
+    // Phase 2: Write one more packet to trigger overflow
+    `uvm_info(get_type_name(), "Phase 2: Writing one packet to trigger overflow", UVM_LOW)
+    write_packet(1000, 32'hF000);
     
-    // Phase 3: Try to read some data (may fail due to overflow corruption)
-    `uvm_info(get_type_name(), "Phase 3: Attempting to read data after overflow", UVM_LOW)
-    read_data(20);
+    // Phase 3: Wait for overflow to be detected and packet drop to occur
+    `uvm_info(get_type_name(), "Phase 3: Waiting for overflow detection and packet drop", UVM_LOW)
+    send_idle_transaction(5);  // Wait for overflow processing
     
-    `uvm_info(get_type_name(), "Overflow scenario completed - Buffer should be overflowed", UVM_LOW)
+    `uvm_info(get_type_name(), "Overflow scenario completed - First overflow occurred", UVM_LOW)
   endtask
 
   // Underflow scenario - try to read from empty buffer

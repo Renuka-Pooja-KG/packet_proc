@@ -815,16 +815,24 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_overflow_underflow(pkt_proc_seq_item tr);
-        // Overflow detection
-        if (tr.enq_req && ref_buffer_full) begin
+        // CRITICAL FIX: Overflow detection should be delayed by 1 cycle to match DUT's registered output
+        // DUT's pck_proc_overflow is a registered signal that updates on the next clock edge
+        // Scoreboard should use previous cycle's buffer_full state to match DUT timing
+        
+        // Overflow detection - use previous cycle's buffer_full state
+        if (tr.enq_req && ref_buffer_full_prev) begin
             ref_pck_proc_overflow = 1;
+            `uvm_info("OVERFLOW_DEBUG", $sformatf("Time=%0t: Overflow detected (delayed by 1 cycle): enq_req=%0b, buffer_full_prev=%0b", 
+                     $time, tr.enq_req, ref_buffer_full_prev), UVM_LOW)
         end else begin
             ref_pck_proc_overflow = 0;
         end
         
-        // Underflow detection
-        if (tr.deq_req && ref_buffer_empty) begin
+        // Underflow detection - use previous cycle's buffer_empty state
+        if (tr.deq_req && ref_buffer_empty_prev) begin
             ref_pck_proc_underflow = 1;
+            `uvm_info("UNDERFLOW_DEBUG", $sformatf("Time=%0t: Underflow detected (delayed by 1 cycle): deq_req=%0b, buffer_empty_prev=%0b", 
+                     $time, tr.deq_req, ref_buffer_empty_prev), UVM_LOW)
         end else begin
             ref_pck_proc_underflow = 0;
         end
