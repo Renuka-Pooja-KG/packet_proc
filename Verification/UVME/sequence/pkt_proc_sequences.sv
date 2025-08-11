@@ -221,7 +221,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
 
   // Read-only scenario
   task read_only_scenario();
-    initialize_dut();
+    //initialize_dut();
     
     `uvm_info(get_type_name(), $sformatf("Starting read-only scenario with %0d reads", num_transactions), UVM_LOW)
     
