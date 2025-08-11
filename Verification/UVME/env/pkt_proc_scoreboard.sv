@@ -623,19 +623,19 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Use WRITE-PATH packet length for these checks
         bit invalid_1 = (tr.in_sop && tr.in_eop);
         bit invalid_3 = (tr.in_sop && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
-        // CRITICAL FIX: Only evaluate invalid_4 when we're actually ending a packet (not starting a new one)
-        // Check if we're in WRITE_DATA state (processing a packet) before evaluating invalid_4
-        // This prevents false packet drops when count_w=0 from previous packet completion
+        // CRITICAL FIX: Use current cycle in_eop, not previous cycle in_eop_r1
+        // invalid_4 should only trigger when we're CURRENTLY ending a packet, not based on previous packet completion
+        // This prevents false packet drops when in_eop_r1=1 from previous packet but current in_eop=0
         bit invalid_4 = (write_state == WRITE_DATA) && 
-                        ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
+                        ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (tr.in_eop));
         // CRITICAL FIX: invalid_5 should check CURRENT cycle in_eop, not previous cycle in_eop_r1
         // This prevents false packet drops when a packet legitimately completes
         bit invalid_5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~tr.in_eop) && (write_state == WRITE_DATA));
         bit invalid_6 = ref_pck_proc_overflow;
 
         // Debug: Show condition calculations that use ref_packet_length_w
-        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop=%0b && in_eop=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r1=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
-                 $time, invalid_1, tr.in_sop, tr.in_eop, invalid_3, tr.in_sop, ref_in_eop_r1, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), tr.in_eop, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
+        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop=%0b && in_eop=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r1=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
+                 $time, invalid_1, tr.in_sop, tr.in_eop, invalid_3, tr.in_sop, ref_in_eop_r1, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), tr.in_eop, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), tr.in_eop, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
 
         // pck_invalid = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) && enq_req
         if (tr.enq_req && (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6)) begin
@@ -644,8 +644,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             
             // Additional debug for invalid_4 specifically
             if (invalid_4) begin
-                `uvm_info("INVALID_4_DEBUG", $sformatf("Time=%0t: INVALID_4 triggered: state=%0d, count_w=%0d < (pck_len_w-1)=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b", 
-                         $time, write_state, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1), UVM_LOW)
+                `uvm_info("INVALID_4_DEBUG", $sformatf("Time=%0t: INVALID_4 triggered: state=%0d, count_w=%0d < (pck_len_w-1)=%0d && pck_len_w!=0=%0b && in_eop=%0b", 
+                         $time, write_state, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), tr.in_eop), UVM_LOW)
             end
             
             ref_packet_drop = 1;
