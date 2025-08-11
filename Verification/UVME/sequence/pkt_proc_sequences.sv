@@ -350,16 +350,34 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     end
   endtask
 
-  // Overflow scenario - try to fill the buffer
+  // Overflow scenario - try to fill the buffer beyond capacity
   task overflow_scenario();
     initialize_dut();
     
-    `uvm_info(get_type_name(), $sformatf("Starting overflow scenario"), UVM_LOW)
+    `uvm_info(get_type_name(), $sformatf("Starting overflow scenario - Buffer depth: 16384"), UVM_LOW)
     
-    // Write many packets to cause overflow
-    for (int pkt = 0; pkt < 50; pkt++) begin
-      write_packet(4, 32'hE000 + pkt);  // Small packets to write many
+    // Phase 1: Fill buffer to near capacity with large packets
+    `uvm_info(get_type_name(), "Phase 1: Filling buffer to near capacity", UVM_LOW)
+    for (int pkt = 0; pkt < 100; pkt++) begin
+      // Each packet: 1 header + 1000 data beats = 1001 beats × 32 bits = 32,032 bits = 4,004 bytes
+      // 100 packets × 4,004 bytes = 400,400 bytes >> 16,384 bytes (buffer capacity)
+      write_packet(1000, 32'hE000 + pkt);
+      send_idle_transaction(1);  // Small gap to prevent backpressure issues
     end
+    
+    // Phase 2: Continue writing to force overflow
+    `uvm_info(get_type_name(), "Phase 2: Forcing buffer overflow", UVM_LOW)
+    for (int pkt = 100; pkt < 150; pkt++) begin
+      // These packets will definitely cause overflow
+      write_packet(1000, 32'hF000 + pkt);
+      send_idle_transaction(1);
+    end
+    
+    // Phase 3: Try to read some data (may fail due to overflow corruption)
+    `uvm_info(get_type_name(), "Phase 3: Attempting to read data after overflow", UVM_LOW)
+    read_data(20);
+    
+    `uvm_info(get_type_name(), "Overflow scenario completed - Buffer should be overflowed", UVM_LOW)
   endtask
 
   // Underflow scenario - try to read from empty buffer
@@ -367,9 +385,13 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     initialize_dut();
     
     `uvm_info(get_type_name(), $sformatf("Starting underflow scenario"), UVM_LOW)
+    // Write some packets to fill the buffer
+      write_packet(10, 32'hC000);
+      send_idle_transaction(10);
     
+    // Try to read more than the buffer can hold
     // Try to read from empty buffer
-    read_data(num_transactions);
+    read_data(12);
   endtask
 
   // Async reset scenario with write/read level verification

@@ -13,8 +13,8 @@ info:
 	@echo "  packet_read_test  			----> to run the packet_read_test.sv (packet reading operations)"
 	@echo "  reset_test  				----> to run the reset_test.sv (reset scenarios)"
 	@echo "  concurrent_test  			----> to run the concurrent_test.sv (concurrent read/write)"
-	@echo "  mixed_test  				----> to run the mixed_test.sv (mixed operations)"
-	@echo "  comprehensive_test  		----> to run the comprehensive_test.sv (all functionality)"
+	@echo "  overflow_test  			----> to run the overflow_test.sv (overflow scenarios)"
+	@echo "  underflow_test  			----> to run the underflow_test.sv (underflow scenarios)"
 	@echo "  waveform   				----> to open the simvision"
 	@echo "  regression 				----> to run the regression & source the cmd and open the imc"
 	@echo "  clean      				----> to delete the previous xrun files and cov files"
@@ -52,6 +52,19 @@ concurrent_test:
 	@echo "[makefile]  concurrent test case is running"
 	xrun -access +rwc -f compile_list.f +UVM_TESTNAME=concurrent_test -uvmhome CDNS-1.1d
 	@echo "[makefile]  concurrent test case run is completed successfully"
+
+# Overflow test case
+overflow_test:
+	@echo "[makefile]  overflow test case is running"
+	xrun -access +rwc -f compile_list.f +UVM_TESTNAME=overflow_test -uvmhome CDNS-1.1d
+	@echo "[makefile]  overflow test case run is completed successfully"
+
+# Underflow test case
+underflow_test:
+	@echo "[makefile]  underflow test case is running"
+	xrun -access +rwc -f compile_list.f +UVM_TESTNAME=underflow_test -uvmhome CDNS-1.1d
+	@echo "[makefile]  underflow test case run is completed successfully"
+
 
 # Mixed operations test case
 mixed_test:

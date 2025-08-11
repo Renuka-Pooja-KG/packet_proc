@@ -29,6 +29,8 @@ package pkt_proc_pkg;
   `include "./../UVME/test/concurrent_test.sv"
   `include "./../UVME/test/mixed_test.sv"
   `include "./../UVME/test/comprehensive_test.sv"
+  `include "./../UVME/test/overflow_test.sv"
+  `include "./../UVME/test/underflow_test.sv"
   
 
 endpackage 
