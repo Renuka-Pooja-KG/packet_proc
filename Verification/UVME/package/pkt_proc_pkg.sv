@@ -31,6 +31,10 @@ package pkt_proc_pkg;
   `include "./../UVME/test/comprehensive_test.sv"
   `include "./../UVME/test/overflow_test.sv"
   `include "./../UVME/test/underflow_test.sv"
+  `include "./../UVME/test/invalid_1_test.sv"
+  `include "./../UVME/test/invalid_3_test.sv"
+  `include "./../UVME/test/invalid_4_test.sv"
+  `include "./../UVME/test/invalid_5_test.sv"
   
 
 endpackage 

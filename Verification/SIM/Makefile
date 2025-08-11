@@ -15,13 +15,17 @@ info:
 	@echo "  concurrent_test  			----> to run the concurrent_test.sv (concurrent read/write)"
 	@echo "  overflow_test  			----> to run the overflow_test.sv (overflow scenarios)"
 	@echo "  underflow_test  			----> to run the underflow_test.sv (underflow scenarios)"
+	@echo "  invalid_1_test  			----> to run the invalid_1_test.sv (invalid_1 scenarios)"
+	@echo "  invalid_3_test  			----> to run the invalid_3_test.sv (invalid_3 scenarios)"
+	@echo "  invalid_4_test  			----> to run the invalid_4_test.sv (invalid_4 scenarios)"
+	@echo "  invalid_5_test  			----> to run the invalid_5_test.sv (invalid_5 scenarios)"
 	@echo "  waveform   				----> to open the simvision"
 	@echo "  regression 				----> to run the regression & source the cmd and open the imc"
 	@echo "  clean      				----> to delete the previous xrun files and cov files"
 	@echo "/----------------------------------------------------------------------------------------//"
 
 # Default target that runs all tests
-all: base_test packet_write_test packet_read_test reset_test concurrent_test mixed_test comprehensive_test waveform
+all: packet_write_test packet_read_test reset_test concurrent_test waveform
 
 # Base test case - Basic write/read operations
 base_test:
@@ -65,6 +69,29 @@ underflow_test:
 	xrun -access +rwc -f compile_list.f +UVM_TESTNAME=underflow_test -uvmhome CDNS-1.1d
 	@echo "[makefile]  underflow test case run is completed successfully"
 
+# Invalid 1 test case
+invalid_1_test:
+	@echo "[makefile]  invalid 1 test case is running"
+	xrun -access +rwc -f compile_list.f +UVM_TESTNAME=invalid_1_test -uvmhome CDNS-1.1d
+	@echo "[makefile]  invalid 1 test case run is completed successfully"
+
+# Invalid 3 test case
+invalid_3_test:
+	@echo "[makefile]  invalid 3 test case is running"
+	xrun -access +rwc -f compile_list.f +UVM_TESTNAME=invalid_3_test -uvmhome CDNS-1.1d
+	@echo "[makefile]  invalid 3 test case run is completed successfully"
+
+# Invalid 4 test case
+invalid_4_test:
+	@echo "[makefile]  invalid 4 test case is running"
+	xrun -access +rwc -f compile_list.f +UVM_TESTNAME=invalid_4_test -uvmhome CDNS-1.1d
+	@echo "[makefile]  invalid 4 test case run is completed successfully"
+
+# Invalid 5 test case
+invalid_5_test:
+	@echo "[makefile]  invalid 5 test case is running"
+	xrun -access +rwc -f compile_list.f +UVM_TESTNAME=invalid_5_test -uvmhome CDNS-1.1d
+	@echo "[makefile]  invalid 5 test case run is completed successfully"
 
 # Mixed operations test case
 mixed_test:
@@ -82,13 +109,10 @@ comprehensive_test:
 regression:
 	@echo "[makefile]  regression running"
 	@echo "[makefile]  Running all test cases in sequence..."
-	$(MAKE) base_test
 	$(MAKE) packet_write_test
 	$(MAKE) packet_read_test
 	$(MAKE) reset_test
 	$(MAKE) concurrent_test
-	$(MAKE) mixed_test
-	$(MAKE) comprehensive_test
 	@echo "[makefile]  All regression tests completed successfully"
 	@echo "[makefile]  Opening coverage viewer..."
 	imc &

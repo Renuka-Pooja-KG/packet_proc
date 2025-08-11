@@ -655,6 +655,277 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
         write_packet(6, 32'hF800);
   endtask
 
+  // ============================================================================
+  // INVALID CONDITION TEST SEQUENCES
+  // ============================================================================
+
+  // Test invalid_1: in_sop && in_eop (start and end of packet simultaneously)
+  task invalid_1_scenario();
+    initialize_dut();
+    
+    `uvm_info(get_type_name(), "Starting invalid_1 scenario - in_sop && in_eop", UVM_LOW)
+    
+    // Phase 1: Write a normal packet first
+    `uvm_info(get_type_name(), "Phase 1: Writing normal packet", UVM_LOW)
+    write_packet(5, 32'hA000);
+    send_idle_transaction(3);
+    
+    // Phase 2: Trigger invalid_1 condition
+    `uvm_info(get_type_name(), "Phase 2: Triggering invalid_1 (in_sop=1 && in_eop=1)", UVM_LOW)
+    tr = pkt_proc_seq_item::type_id::create("tr_invalid_1");
+    start_item(tr);
+    assert(tr.randomize() with {
+      pck_proc_int_mem_fsm_rstn == 1'b1;
+      pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+      empty_de_assert == 1'b0;
+      pck_proc_almost_full_value == local::almost_full_value;
+      pck_proc_almost_empty_value == local::almost_empty_value;
+      enq_req == 1'b1;
+      deq_req == 1'b0;
+      in_sop == 1'b1;        // Start of packet
+      in_eop == 1'b1;        // End of packet (INVALID!)
+      wr_data_i == 32'hB001;
+      pck_len_valid == 1'b1;
+      pck_len_i == 12'h0001; // Single beat packet
+    });
+    finish_item(tr);
+    
+    // Phase 3: Wait for packet drop processing
+    `uvm_info(get_type_name(), "Phase 3: Waiting for packet drop processing", UVM_LOW)
+    send_idle_transaction(5);
+    
+    `uvm_info(get_type_name(), "Invalid_1 scenario completed - Packet drop expected", UVM_LOW)
+  endtask
+
+  // Test invalid_3: in_sop && (~in_eop_r1) && (write_state == WRITE_DATA)
+  task invalid_3_scenario();
+    initialize_dut();
+    
+    `uvm_info(get_type_name(), "Starting invalid_3 scenario - in_sop && (~in_eop_r1) && (write_state == WRITE_DATA)", UVM_LOW)
+    
+    // Phase 1: Write packet header to get into WRITE_DATA state
+    `uvm_info(get_type_name(), "Phase 1: Writing packet header to enter WRITE_DATA state", UVM_LOW)
+    tr = pkt_proc_seq_item::type_id::create("tr_invalid_3_header");
+    start_item(tr);
+    assert(tr.randomize() with {
+      pck_proc_int_mem_fsm_rstn == 1'b1;
+      pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+      empty_de_assert == 1'b0;
+      pck_proc_almost_full_value == local::almost_full_value;
+      pck_proc_almost_empty_value == local::almost_empty_value;
+      enq_req == 1'b1;
+      deq_req == 1'b0;
+      in_sop == 1'b1;        // Start of packet
+      in_eop == 1'b0;        // Not end of packet
+      wr_data_i == 32'hB000;
+      pck_len_valid == 1'b1;
+      pck_len_i == 12'h000A; // Packet length = 10 beats
+    });
+    finish_item(tr);
+    
+    // Phase 2: Write several data beats to stay in WRITE_DATA state
+    `uvm_info(get_type_name(), "Phase 2: Writing data beats to stay in WRITE_DATA state", UVM_LOW)
+    for (int i = 0; i < 5; i++) begin
+      tr = pkt_proc_seq_item::type_id::create("tr_invalid_3_data");
+      start_item(tr);
+      assert(tr.randomize() with {
+        pck_proc_int_mem_fsm_rstn == 1'b1;
+        pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+        empty_de_assert == 1'b0;
+        pck_proc_almost_full_value == local::almost_full_value;
+        pck_proc_almost_empty_value == local::almost_empty_value;
+        enq_req == 1'b1;
+        deq_req == 1'b0;
+        in_sop == 1'b0;        // Not start of packet
+        in_eop == 1'b0;        // Not end of packet
+        wr_data_i == 32'hB001 + i;
+        pck_len_valid == 1'b0;
+        pck_len_i == 12'h0000;
+      });
+      finish_item(tr);
+      send_idle_transaction(1);
+    end
+    
+    // Phase 3: Trigger invalid_3 condition - assert in_sop while in WRITE_DATA state
+    `uvm_info(get_type_name(), "Phase 3: Triggering invalid_3 (in_sop=1 while in WRITE_DATA state)", UVM_LOW)
+    tr = pkt_proc_seq_item::type_id::create("tr_invalid_3_trigger");
+    start_item(tr);
+    assert(tr.randomize() with {
+      pck_proc_int_mem_fsm_rstn == 1'b1;
+      pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+      empty_de_assert == 1'b0;
+      pck_proc_almost_full_value == local::almost_full_value;
+      pck_proc_almost_empty_value == local::almost_empty_value;
+      enq_req == 1'b1;
+      deq_req == 1'b0;
+      in_sop == 1'b1;        // Start of packet (INVALID - already processing a packet!)
+      in_eop == 1'b0;        // Not end of packet
+      wr_data_i == 32'hB006;
+      pck_len_valid == 1'b1;
+      pck_len_i == 12'h0005; // New packet length
+    });
+    finish_item(tr);
+    
+    // Phase 4: Wait for packet drop processing
+    `uvm_info(get_type_name(), "Phase 4: Waiting for packet drop processing", UVM_LOW)
+    send_idle_transaction(5);
+    
+    `uvm_info(get_type_name(), "Invalid_3 scenario completed - Packet drop expected", UVM_LOW)
+  endtask
+
+  // Test invalid_4: (count_w < (packet_length_w - 1)) && (packet_length_w != 0) && (in_eop)
+  task invalid_4_scenario();
+    initialize_dut();
+    
+    `uvm_info(get_type_name(), "Starting invalid_4 scenario - count_w < (packet_length_w - 1) && in_eop", UVM_LOW)
+    
+    // Phase 1: Write partial packet (not enough beats)
+    `uvm_info(get_type_name(), "Phase 1: Writing partial packet (insufficient beats)", UVM_LOW)
+    tr = pkt_proc_seq_item::type_id::create("tr_invalid_4_partial");
+    start_item(tr);
+    assert(tr.randomize() with {
+      pck_proc_int_mem_fsm_rstn == 1'b1;
+      pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+      empty_de_assert == 1'b0;
+      pck_proc_almost_full_value == local::almost_full_value;
+      pck_proc_almost_empty_value == local::almost_empty_value;
+      enq_req == 1'b1;
+      deq_req == 1'b0;
+      in_sop == 1'b1;        // Start of packet
+      in_eop == 1'b0;        // Not end of packet
+      wr_data_i == 32'hC000;
+      pck_len_valid == 1'b1;
+      pck_len_i == 12'h0005; // Packet length = 5 beats
+    });
+    finish_item(tr);
+    
+    // Phase 2: Write only 2 more beats (should have 3 beats total, need 5)
+    `uvm_info(get_type_name(), "Phase 2: Writing only 2 more beats (total=3, need=5)", UVM_LOW)
+    for (int i = 0; i < 2; i++) begin
+      tr = pkt_proc_seq_item::type_id::create("tr_invalid_4_data");
+      start_item(tr);
+      assert(tr.randomize() with {
+        pck_proc_int_mem_fsm_rstn == 1'b1;
+        pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+        empty_de_assert == 1'b0;
+        pck_proc_almost_full_value == local::almost_full_value;
+        pck_proc_almost_empty_value == local::almost_empty_value;
+        enq_req == 1'b1;
+        deq_req == 1'b0;
+        in_sop == 1'b0;        // Not start of packet
+        in_eop == 1'b0;        // Not end of packet
+        wr_data_i == 32'hC001 + i;
+        pck_len_valid == 1'b0;
+        pck_len_i == 12'h0000;
+      });
+      finish_item(tr);
+      send_idle_transaction(1);
+    end
+    
+    // Phase 3: Trigger invalid_4 with premature end of packet
+    `uvm_info(get_type_name(), "Phase 3: Triggering invalid_4 (premature end with count_w=3 < 4)", UVM_LOW)
+    tr = pkt_proc_seq_item::type_id::create("tr_invalid_4_eop");
+    start_item(tr);
+    assert(tr.randomize() with {
+      pck_proc_int_mem_fsm_rstn == 1'b1;
+      pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+      empty_de_assert == 1'b0;
+      pck_proc_almost_full_value == local::almost_full_value;
+      pck_proc_almost_empty_value == local::almost_empty_value;
+      enq_req == 1'b1;
+      deq_req == 1'b0;
+      in_sop == 1'b0;        // Not start of packet
+      in_eop == 1'b1;        // End of packet (INVALID - only 3 beats written, need 5)
+      wr_data_i == 32'hC003;
+      pck_len_valid == 1'b0;
+      pck_len_i == 12'h0000;
+    });
+    finish_item(tr);
+    
+    // Phase 4: Wait for packet drop processing
+    `uvm_info(get_type_name(), "Phase 4: Waiting for packet drop processing", UVM_LOW)
+    send_idle_transaction(5);
+    
+    `uvm_info(get_type_name(), "Invalid_4 scenario completed - Packet drop expected", UVM_LOW)
+  endtask
+
+  // Test invalid_5: ((count_w == (packet_length_w - 1)) || (packet_length_w == 0)) && (~in_eop) && (write_state == WRITE_DATA)
+  task invalid_5_scenario();
+    initialize_dut();
+    
+    `uvm_info(get_type_name(), "Starting invalid_5 scenario - count_w == (packet_length_w - 1) && (~in_eop) && (write_state == WRITE_DATA)", UVM_LOW)
+    
+    // Phase 1: Write packet header to get into WRITE_DATA state
+    `uvm_info(get_type_name(), "Phase 1: Writing packet header to enter WRITE_DATA state", UVM_LOW)
+    tr = pkt_proc_seq_item::type_id::create("tr_invalid_5_header");
+    start_item(tr);
+    assert(tr.randomize() with {
+      pck_proc_int_mem_fsm_rstn == 1'b1;
+      pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+      empty_de_assert == 1'b0;
+      pck_proc_almost_full_value == local::almost_full_value;
+      pck_proc_almost_empty_value == local::almost_empty_value;
+      enq_req == 1'b1;
+      deq_req == 1'b0;
+      in_sop == 1'b1;        // Start of packet
+      in_eop == 1'b0;        // Not end of packet
+      wr_data_i == 32'hD000;
+      pck_len_valid == 1'b1;
+      pck_len_i == 12'h0005; // Packet length = 5 beats
+    });
+    finish_item(tr);
+    
+    // Phase 2: Write data beats to reach count_w = 4 (packet_length_w - 1)
+    `uvm_info(get_type_name(), "Phase 2: Writing data beats to reach count_w = 4 (packet_length_w - 1)", UVM_LOW)
+    for (int i = 0; i < 3; i++) begin
+      tr = pkt_proc_seq_item::type_id::create("tr_invalid_5_data");
+      start_item(tr);
+      assert(tr.randomize() with {
+        pck_proc_int_mem_fsm_rstn == 1'b1;
+        pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+        empty_de_assert == 1'b0;
+        pck_proc_almost_full_value == local::almost_full_value;
+        pck_proc_almost_empty_value == local::almost_empty_value;
+        enq_req == 1'b1;
+        deq_req == 1'b0;
+        in_sop == 1'b0;        // Not start of packet
+        in_eop == 1'b0;        // Not end of packet
+        wr_data_i == 32'hD001 + i;
+        pck_len_valid == 1'b0;
+        pck_len_i == 12'h0000;
+      });
+      finish_item(tr);
+      send_idle_transaction(1);
+    end
+    
+    // Phase 3: Trigger invalid_5 condition - count_w = 4 (packet_length_w - 1) but in_eop = 0
+    `uvm_info(get_type_name(), "Phase 3: Triggering invalid_5 (count_w=4 == packet_length_w-1=4, but in_eop=0)", UVM_LOW)
+    tr = pkt_proc_seq_item::type_id::create("tr_invalid_5_trigger");
+    start_item(tr);
+    assert(tr.randomize() with {
+      pck_proc_int_mem_fsm_rstn == 1'b1;
+      pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+      empty_de_assert == 1'b0;
+      pck_proc_almost_full_value == local::almost_full_value;
+      pck_proc_almost_empty_value == local::almost_empty_value;
+      enq_req == 1'b1;
+      deq_req == 1'b0;
+      in_sop == 1'b0;        // Not start of packet
+      in_eop == 1'b0;        // Not end of packet (INVALID - should be 1 when count_w reaches limit!)
+      wr_data_i == 32'hD004;
+      pck_len_valid == 1'b0;
+      pck_len_i == 12'h0000;
+    });
+    finish_item(tr);
+    
+    // Phase 4: Wait for packet drop processing
+    `uvm_info(get_type_name(), "Phase 4: Waiting for packet drop processing", UVM_LOW)
+    send_idle_transaction(5);
+    
+    `uvm_info(get_type_name(), "Invalid_5 scenario completed - Packet drop expected", UVM_LOW)
+  endtask
+
+
 endclass
 
 `endif // PKT_PROC_SEQUENCES_SV
