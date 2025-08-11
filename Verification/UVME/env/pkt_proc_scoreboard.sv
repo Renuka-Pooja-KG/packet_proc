@@ -765,7 +765,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 ref_wr_lvl_next = ref_wr_lvl + 1;
             end else if (ref_rd_en && !ref_buffer_empty) begin
                 ref_wr_lvl = ref_wr_lvl - 1;
-                ref_wr_lvl_next = ref_wr_lvl - 1;
+                ref_wr_lvl_next = ref_wr_lvl;
             end else begin
                 ref_wr_lvl_next = ref_wr_lvl;  // No change
             end
