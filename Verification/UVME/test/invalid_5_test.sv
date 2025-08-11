@@ -5,9 +5,6 @@
 // Date: 2024
 //=============================================================================
 
-`ifndef INVALID_5_TEST_SV
-`define INVALID_5_TEST_SV
-
 class invalid_5_test extends uvm_test;
   `uvm_component_utils(invalid_5_test)
 
@@ -29,7 +26,7 @@ class invalid_5_test extends uvm_test;
     phase.raise_objection(this);
     
     // Configure sequence for invalid 1 scenario (scenario = 15)
-    seq.invalid_5_scenario();  // Invalid 5 scenario    
+    seq.scenario = 18;  // Invalid 5 scenario    
     `uvm_info(get_type_name(), $sformatf("Starting invalid 5 test with scenario %0d", seq.scenario), UVM_LOW)
     
     // Start the sequence
@@ -40,5 +37,3 @@ class invalid_5_test extends uvm_test;
   endtask
 
 endclass
-
-`endif // INVALID_5_TEST_SV 

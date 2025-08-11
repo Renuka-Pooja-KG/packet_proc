@@ -5,9 +5,6 @@
 // Date: 2024
 //=============================================================================
 
-`ifndef INVALID_1_TEST_SV
-`define INVALID_1_TEST_SV
-
 // Packet Write Test for Packet Processor
 // Tests packet writing operations with proper reset initialization
 
@@ -32,7 +29,7 @@ class invalid_1_test extends uvm_test;
     phase.raise_objection(this);
     
     // Configure sequence for invalid 1 scenario (scenario = 15)
-    seq.invalid_1_scenario();  // Invalid 1 scenario    
+    seq.scenario = 15;  // Invalid 1 scenario    
     `uvm_info(get_type_name(), $sformatf("Starting invalid 1 test with scenario %0d", seq.scenario), UVM_LOW)
     
     // Start the sequence
@@ -43,5 +40,3 @@ class invalid_1_test extends uvm_test;
   endtask
 
 endclass
-
-`endif // INVALID_1_TEST_SV 
