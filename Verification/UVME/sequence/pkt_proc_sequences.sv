@@ -403,7 +403,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 3: Read some data to increment read level
     `uvm_info(get_type_name(), "Phase 3: Reading data to increment read level", UVM_LOW)
-    read_data(10);
+    read_data(8);
     
     // Phase 4: Assert sync reset while keeping async reset deasserted
     `uvm_info(get_type_name(), "Phase 4: Asserting sync reset (async reset deasserted)", UVM_LOW)
