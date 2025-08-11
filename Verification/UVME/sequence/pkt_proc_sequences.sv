@@ -397,7 +397,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     // Phase 2: Write packets to increment write level
     `uvm_info(get_type_name(), "Phase 2: Writing packets to increment write level", UVM_LOW)
     for (int pkt = 0; pkt < 5; pkt++) begin
-      write_packet($urandom_range(4, 8), 32'hD000 + (pkt << 8));
+      write_packet(8, 32'hD000 + (pkt << 8));
       send_idle_transaction(1);  // Small gap between packets
     end
     
@@ -411,12 +411,12 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 5: Deassert sync reset
     `uvm_info(get_type_name(), "Phase 5: Deasserting sync reset", UVM_LOW)
-    send_reset_transaction(1'b1, 1'b0, 3);  // async_rst=1, sync_rst=0
+    send_reset_transaction(1'b1, 1'b0, 5);  // async_rst=1, sync_rst=0
     
     // Phase 6: Write more packets to verify DUT is functional
     `uvm_info(get_type_name(), "Phase 6: Writing packets after sync reset", UVM_LOW)
     for (int pkt = 0; pkt < 3; pkt++) begin
-      write_packet($urandom_range(4, 6), 32'hE000 + (pkt << 8));
+      write_packet(8, 32'hE000 + (pkt << 8));
       send_idle_transaction(1);
     end
     
@@ -432,7 +432,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     // Phase 9: Final write/read sequence
     `uvm_info(get_type_name(), "Phase 9: Final write/read sequence", UVM_LOW)
     write_packet(6, 32'hF000);
-    read_data(5);
+    read_data(8);
     
     `uvm_info(get_type_name(), "Sync reset scenario completed", UVM_LOW)
   endtask
