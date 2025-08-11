@@ -47,9 +47,9 @@ class pkt_proc_monitor extends uvm_monitor;
       tr.deq_req = vif.deq_req;           // Raw signal, not clocking block
       
       // Capture output signals - These come from RTL, so keep using monitor_cb
-      tr.out_sop = vif.monitor_cb.out_sop;
+      tr.out_sop = vif.out_sop;
       tr.rd_data_o = vif.monitor_cb.rd_data_o;
-      tr.out_eop = vif.monitor_cb.out_eop;
+      tr.out_eop = vif.out_eop;
       
       // Capture status signals - these are combinational, so capture directly from interface
       tr.pck_proc_full = vif.pck_proc_full;

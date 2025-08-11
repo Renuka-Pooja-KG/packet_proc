@@ -77,7 +77,7 @@ class packet_read_test extends uvm_test;
     // seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Final idle cycles to clean up
-    seq.send_idle_transaction(5);
+    //seq.send_idle_transaction(5);
     
     `uvm_info(get_type_name(), "Packet read test suite completed", UVM_LOW)
     phase.drop_objection(this);
