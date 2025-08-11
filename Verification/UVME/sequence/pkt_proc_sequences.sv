@@ -475,8 +475,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     tr.wr_data_i = 32'hF600;
     tr.pck_len_valid = 1'b1;
     tr.pck_len_i = current_packet_length[11:0];
-    tr.pck_proc_almost_full_value = almost_full_value;
-    tr.pck_proc_almost_empty_value = almost_empty_value;
+    tr.pck_proc_almost_full_value = 5'd28;
+    tr.pck_proc_almost_empty_value = 5'd4;
     finish_item(tr);
     
     // Write a few data words
@@ -493,14 +493,14 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       tr.wr_data_i = 32'hF600 + i;
       tr.pck_len_valid = 1'b0;
       tr.pck_len_i = current_packet_length[11:0];
-      tr.pck_proc_almost_full_value = almost_full_value;
-      tr.pck_proc_almost_empty_value = almost_empty_value;
+      tr.pck_proc_almost_full_value = 5'd28;
+      tr.pck_proc_almost_empty_value = 5'd4;
       finish_item(tr);
     end
     
     // Apply reset during packet transmission
     send_reset_transaction(1'b0, 1'b1, 3);
-    send_reset_transaction(1'b1, 1'b0, 2);
+    send_reset_transaction(1'b1, 1'b1, 2);
     
     // Try to complete the packet (should be dropped)
     write_packet(6, 32'hF700);
@@ -525,11 +525,11 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     tr.deq_req = 1'b0;
     tr.in_sop = 1'b1;
     tr.in_eop = 1'b0;
-    tr.wr_data_i = 32'hF600;
+    tr.wr_data_i = 32'h0005;
     tr.pck_len_valid = 1'b1;
-    tr.pck_len_i = current_packet_length[11:0];
-    tr.pck_proc_almost_full_value = almost_full_value;
-    tr.pck_proc_almost_empty_value = almost_empty_value;
+    tr.pck_len_i = 12'h5;
+    tr.pck_proc_almost_full_value = 5'd28;
+    tr.pck_proc_almost_empty_value = 5'd4;
     finish_item(tr);
     
     // Write a few data words
@@ -543,11 +543,11 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       tr.deq_req = 1'b0;
       tr.in_sop = 1'b0;
       tr.in_eop = 1'b0;
-      tr.wr_data_i = 32'hF600 + i;
+      tr.wr_data_i = 32'h0005 + i;
       tr.pck_len_valid = 1'b0;
-      tr.pck_len_i = current_packet_length[11:0];
-      tr.pck_proc_almost_full_value = almost_full_value;
-      tr.pck_proc_almost_empty_value = almost_empty_value;
+      tr.pck_len_i = 12'h5;
+      tr.pck_proc_almost_full_value = 5'd28;
+      tr.pck_proc_almost_empty_value = 5'd4;
       finish_item(tr);
     end
 
@@ -561,11 +561,11 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     tr.deq_req = 1'b0;
     tr.in_sop = 1'b0;
     tr.in_eop = 1'b1;
-    tr.wr_data_i = 32'hF700;
+    tr.wr_data_i = 32'h0005;
     tr.pck_len_valid = 1'b1;
-    tr.pck_len_i = current_packet_length[11:0];
-    tr.pck_proc_almost_full_value = almost_full_value;
-    tr.pck_proc_almost_empty_value = almost_empty_value;
+    tr.pck_len_i = 12'h5;
+    tr.pck_proc_almost_full_value = 5'd28;
+    tr.pck_proc_almost_empty_value = 5'd4;
     finish_item(tr);
     
     send_idle_transaction(5);
@@ -584,8 +584,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       tr.wr_data_i = 32'h0;
       tr.pck_len_valid = 1'b0;
       tr.pck_len_i = 12'h0;
-      tr.pck_proc_almost_full_value = almost_full_value;
-      tr.pck_proc_almost_empty_value = almost_empty_value;
+      tr.pck_proc_almost_full_value = 5'd28;
+      tr.pck_proc_almost_empty_value = 5'd4;
       finish_item(tr);
     end
 
