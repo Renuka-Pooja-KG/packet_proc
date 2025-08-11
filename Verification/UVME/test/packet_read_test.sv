@@ -31,7 +31,7 @@ class packet_read_test extends uvm_test;
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Add idle cycles to ensure writes complete
-    send_idle_cycles(5);
+    send_idle_transactions(5);
     
     // Test 2: Clean read operations (no random enq_req)
     `uvm_info(get_type_name(), "Test 2: Clean read operations", UVM_LOW)
@@ -46,7 +46,7 @@ class packet_read_test extends uvm_test;
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Add idle cycles to ensure writes complete
-    send_idle_cycles(5);
+    send_idle_transactions(5);
     
     // Test 4: Extended read operations
     `uvm_info(get_type_name(), "Test 4: Extended read operations", UVM_LOW)
@@ -77,34 +77,12 @@ class packet_read_test extends uvm_test;
     // seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Final idle cycles to clean up
-    send_idle_cycles(5);
+    send_idle_transactions(5);
     
     `uvm_info(get_type_name(), "Packet read test suite completed", UVM_LOW)
     phase.drop_objection(this);
   endtask
 
-  // Helper task to send idle cycles without any active signals
-  task send_idle_cycles(int cycles);
-    pkt_proc_seq_item tr;
-    repeat(cycles) begin
-      tr = pkt_proc_seq_item::type_id::create("tr_idle");
-      start_item(tr);
-      // All signals inactive - clean idle state
-      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
-      tr.empty_de_assert = 1'b0;
-      tr.enq_req = 1'b0;      // No write requests
-      tr.deq_req = 1'b0;      // No read requests
-      tr.in_sop = 1'b0;
-      tr.in_eop = 1'b0;
-      tr.wr_data_i = 32'h0;
-      tr.pck_len_valid = 1'b0;
-      tr.pck_len_i = 12'h0;
-      tr.pck_proc_almost_full_value = 5'd28;
-      tr.pck_proc_almost_empty_value = 5'd4;
-      finish_item(tr);
-    end
-    `uvm_info(get_type_name(), $sformatf("Sent %0d idle cycles", cycles), UVM_LOW)
-  endtask
+
 
 endclass
