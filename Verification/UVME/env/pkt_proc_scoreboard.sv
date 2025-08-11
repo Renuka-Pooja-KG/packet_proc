@@ -41,6 +41,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_pck_proc_overflow, ref_pck_proc_underflow;
     bit ref_packet_drop;
     bit ref_packet_drop_prev;  // track rising edge of packet_drop for debug
+    bit ref_invalid_condition_prev;  // track invalid conditions across cycles for packet drop timing
     
     // Expected outputs
     bit ref_out_sop, ref_out_eop;
@@ -130,6 +131,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_proc_underflow = 0;
         ref_packet_drop = 0;
         ref_packet_drop_prev = 0;
+        ref_invalid_condition_prev = 0;
         
         // Initialize outputs
         ref_out_sop = 0;
@@ -572,38 +574,6 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         endcase
     endfunction
 
-    function bit is_packet_invalid(pkt_proc_seq_item tr);
-        // Mirror RTL pck_invalid: (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) && enq_req
-    //     bit cond1, cond3, cond4, cond5, cond6;
-        
-    //     // Debug: Show current ref_packet_length_w value when evaluating packet validity
-    //     `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: is_packet_invalid evaluation - ref_packet_length_w=%0d, ref_count_w=%0d, write_state=%0d, tr.pck_len_valid=%0b, tr.in_sop=%0b, tr.pck_len_i=%0d", 
-    //              $time, ref_packet_length_w, ref_count_w, write_state, tr.pck_len_valid, tr.in_sop, tr.pck_len_i), UVM_LOW)
-        
-    //     cond1 = (tr.in_sop && tr.in_eop);
-    //     //cond3 = (tr.in_sop && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
-    //    // cond3 = (tr.in_sop && ~ref_in_eop_r1 && (write_state == WRITE_DATA));
-    //     // Use WRITE-PATH packet length for these checks
-    //     cond4 = ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
-    //     cond5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
-    //     cond6 = (ref_pck_proc_overflow);
-
-    //     // Debug: Show condition calculations that use ref_packet_length_w
-    //     `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - cond4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b), cond5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d)", 
-    //              $time, cond4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, 
-    //                     cond5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state), UVM_LOW)
-
-    //    // if (tr.enq_req && (cond1 || cond3 || cond4 || cond5 || cond6)) begin
-    //     if (tr.enq_req && (cond1 || cond4 || cond5 || cond6)) begin
-    //     //    `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: pck_invalid: enq_req=1, state=%0d, cond1=%0b, cond3=%0b, cond4=%0b, cond5=%0b, cond6=%0b, count_w=%0d, pck_len_w=%0d, in_sop=%0b, in_eop_r1=%0b",
-    //     //             $time, write_state, cond1, cond3, cond4, cond5, cond6, ref_count_w, ref_packet_length_w, tr.in_sop, ref_in_eop_r1), UVM_LOW)
-    //         `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: pck_invalid: enq_req=1, state=%0d, cond1=%0b, cond4=%0b, cond5=%0b, cond6=%0b, count_w=%0d, pck_len_w=%0d, in_sop=%0b, in_eop_r1=%0b",
-    //                  $time, write_state, cond1, cond4, cond5, cond6, ref_count_w, ref_packet_length_w, tr.in_sop, ref_in_eop_r1), UVM_LOW)
-    //         return 1;
-    //     end
-        return 0;
-    endfunction
-
     function void generate_write_read_enables(pkt_proc_seq_item tr);
         // Determine write enable (matching RTL logic exactly)
         // RTL uses enq_req_r for output logic, but current cycle values for state transitions
@@ -651,14 +621,24 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // NOTE: Use current cycle buffer_full for immediate detection, not delayed version
         bit invalid_6 = (tr.enq_req && ref_buffer_full);
 
+        // CRITICAL FIX: Track invalid conditions across cycles to match DUT behavior
+        // The DUT's pck_invalid requires both invalid condition AND enq_req, but the timing might be different
+        // We need to detect invalid conditions and then assert packet_drop when enq_req is high
+        bit any_invalid_condition = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6);
+        
+        // Store invalid condition for next cycle use
+        ref_invalid_condition_prev = any_invalid_condition;
+
         // Debug: Show condition calculations that use ref_packet_length_w
         `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r1=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
                  $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, tr.in_sop, ref_in_eop_r1, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), tr.in_eop, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), tr.in_eop, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
 
-        // pck_invalid = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) && enq_req
-        if (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) begin
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: pck_invalid: enq_req=1, state=%0d, invalid_1=%0b, invalid_3=%0b, invalid_4=%0b, invalid_5=%0b, invalid_6=%0b, count_w=%0d, pck_len_w=%0d, in_sop_r1=%0b, in_eop_r1=%0b",
-                     $time, write_state, invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, ref_count_w, ref_packet_length_w, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
+        // CRITICAL FIX: Packet drop logic now handles both immediate and delayed invalid conditions
+        // Case 1: Current cycle has both invalid condition AND enq_req (immediate packet drop)
+        // Case 2: Previous cycle had invalid condition AND current cycle has enq_req (delayed packet drop)
+        if (tr.enq_req && (any_invalid_condition || ref_invalid_condition_prev)) begin
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: pck_invalid: enq_req=1, state=%0d, invalid_1=%0b, invalid_3=%0b, invalid_4=%0b, invalid_5=%0b, invalid_6=%0b, prev_invalid=%0b, count_w=%0d, pck_len_w=%0d, in_sop_r1=%0b, in_eop_r1=%0b",
+                     $time, write_state, invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, ref_invalid_condition_prev, ref_count_w, ref_packet_length_w, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
             
             // Additional debug for invalid_4 specifically
             if (invalid_4) begin
@@ -861,31 +841,6 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_proc_underflow = 0;
         end
         
-        // // Packet drop detection & debug
-        // if (is_packet_invalid(tr)) begin
-        //     if (!ref_packet_drop) begin
-        //         // Recompute condition flags for detailed debug
-        //         bit dbg_cond1, dbg_cond3, dbg_cond4, dbg_cond5, dbg_cond6;
-        //         dbg_cond1 = (tr.in_sop && tr.in_eop);
-        //         //dbg_cond3 = (ref_in_sop_r1 && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
-        //         dbg_cond4 = ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
-        //         dbg_cond5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
-        //         dbg_cond6 = (ref_pck_proc_overflow);
-        //         //`uvm_info("PKT_DROP_DEBUG", $sformatf(
-        //         //    "Time=%0t: PACKET_DROP detected. enq_req=%0b | cond1=%0b cond3=%0b cond4=%0b cond5=%0b cond6=%0b | in_sop=%0b in_eop=%0b in_sop_r=%0b in_sop_r1=%0b in_eop_r1=%0b | state=%0d count_w=%0d pck_len_w=%0d overflow=%0b",
-        //         `uvm_info("PKT_DROP_DEBUG", $sformatf(
-        //             "Time=%0t: PACKET_DROP detected. enq_req=%0b | cond1=%0b cond4=%0b cond5=%0b cond6=%0b | in_sop=%0b in_eop=%0b in_sop_r=%0b in_sop_r1=%0b in_eop_r1=%0b | state=%0d count_w=%0d pck_len_w=%0d overflow=%0b",
-        //             $time,
-        //             tr.enq_req,
-        //            // dbg_cond1, dbg_cond3, dbg_cond4, dbg_cond5, dbg_cond6,
-        //             dbg_cond1, dbg_cond4, dbg_cond5, dbg_cond6,
-        //             tr.in_sop, tr.in_eop, ref_in_sop_r, ref_in_sop_r1, ref_in_eop_r1,
-        //             write_state, ref_count_w, ref_packet_length_w, ref_pck_proc_overflow), UVM_LOW)
-        //     end
-        //     ref_packet_drop = 1;
-        // end else begin
-        //     ref_packet_drop_prev = ref_packet_drop;
-        // end
     endfunction
 
     function void update_outputs(pkt_proc_seq_item tr);
