@@ -65,7 +65,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     
     // Read pipeline delay (matching DUT timing)
     bit ref_rd_en_prev;  // Previous cycle's read enable
-    bit [31:0] ref_rd_data_delayed;  // Delayed read data output
+    //bit [31:0] ref_rd_data_delayed;  // Delayed read data output
     bit ref_deq_req_prev;  // Previous cycle's dequeue request (for out_sop timing)
     bit ref_deq_req_prev2;  // Two cycles ago dequeue request (for out_sop timing)
     bit ref_buffer_full_prev;   // Previous cycle's buffer_full
@@ -150,7 +150,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_rd_en = 0;
         ref_wr_en_prev = 0;
         ref_rd_en_prev = 0;
-        ref_rd_data_delayed = 0;
+        //ref_rd_data_delayed = 0;
         ref_deq_req_prev = 0;
         ref_deq_req_prev2 = 0;
         ref_buffer_full_prev = 0;
@@ -696,10 +696,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                      $time, pck_len_r2_value, ref_pck_len_valid_r1, ref_in_sop_r1, ref_pck_len_i_r1, ref_wr_data_r1[11:0], ref_packet_length_w), UVM_LOW)
         end
         
-        // Read operations with one-cycle delay for data path only (matching DUT memory pipeline)
-        // Use ref_rd_en_prev for pointer updates (data path timing)
-        if (ref_rd_en_prev && !ref_buffer_empty) begin
-            ref_rd_data_delayed = ref_buffer[ref_rd_ptr[13:0]];
+        // CRITICAL FIX: Read operations should update based on CURRENT cycle deq_req (matching DUT behavior)
+        // This prevents ref_rd_data from being 1 cycle behind the DUT's rd_data_o
+        if (tr.deq_req && !ref_buffer_empty) begin
+            ref_rd_data_o = ref_buffer[ref_rd_ptr[13:0]];
             ref_rd_ptr = ref_rd_ptr + 1;
             // NOTE: Do not increment ref_count_r here; count is driven by FSM on deq_req_r
         end
@@ -895,7 +895,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     function void compare_outputs(pkt_proc_seq_item tr);
         // Debug information
         `uvm_info("SCOREBOARD_DEBUG", $sformatf("Time=%0d: DUT wr_lvl=%0d, ref_wr_lvl=%0d, DUT_empty=%0b, ref_empty=%0b, DUT_rd_data=0x%0h, ref_rd_data=0x%0h", 
-                 $time, tr.pck_proc_wr_lvl, ref_wr_lvl, tr.pck_proc_empty, ref_buffer_empty, tr.rd_data_o, ref_rd_data_delayed), UVM_LOW)
+                 $time, tr.pck_proc_wr_lvl, ref_wr_lvl, tr.pck_proc_empty, ref_buffer_empty, tr.rd_data_o, ref_rd_data_o), UVM_LOW)
         
         // Compare all outputs with reference model
         if (tr.out_sop !== ref_out_sop) begin
@@ -909,8 +909,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         if (tr.deq_req && !ref_buffer_empty) begin
-            if (tr.rd_data_o !== ref_rd_data_delayed) begin
-                `uvm_error("SCOREBOARD_NEW", $sformatf("rd_data_o mismatch: expected=0x%0h, got=0x%0h", ref_rd_data_delayed, tr.rd_data_o))
+            if (tr.rd_data_o !== ref_rd_data_o) begin
+                `uvm_error("SCOREBOARD_NEW", $sformatf("rd_data_o mismatch: expected=0x%0h, got=0x%0h", ref_rd_data_o, tr.rd_data_o))
                 errors++;
             end
         end
