@@ -637,6 +637,13 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         if (tr.enq_req && (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6)) begin
             `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: pck_invalid: enq_req=1, state=%0d, invalid_1=%0b, invalid_3=%0b, invalid_4=%0b, invalid_5=%0b, invalid_6=%0b, count_w=%0d, pck_len_w=%0d, in_sop=%0b, in_eop_r1=%0b",
                      $time, write_state, invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, ref_count_w, ref_packet_length_w, tr.in_sop, ref_in_eop_r1), UVM_LOW)
+            
+            // Additional debug for invalid_4 specifically
+            if (invalid_4) begin
+                `uvm_info("INVALID_4_DEBUG", $sformatf("Time=%0t: INVALID_4 triggered: count_w=%0d < (pck_len_w-1)=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b", 
+                         $time, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1), UVM_LOW)
+            end
+            
             ref_packet_drop = 1;
         end else begin
             ref_packet_drop = 0;
@@ -661,6 +668,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             if (write_state == WRITE_HEADER || write_state == WRITE_DATA) begin
                 ref_wr_ptr = ref_wr_ptr + 1;
                 ref_count_w = ref_count_w + 1;
+                `uvm_info("COUNT_W_DEBUG", $sformatf("Time=%0t: count_w incremented to %0d (state=%0d, wr_en=%0b)", 
+                         $time, ref_count_w, write_state, ref_wr_en), UVM_LOW)
             end
         end
         
@@ -728,6 +737,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             // Note: ref_packet_drop is reset in update_packet_drop_logic() for next cycle
             `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP applied. wr_ptr(after)=%0d, wr_lvl=%0d",
                      $time, ref_wr_ptr, ref_wr_lvl), UVM_LOW)
+        end
+        
+        // CRITICAL FIX: Reset count_w when packet completes normally (matching RTL exactly)
+        // RTL resets count_w when: (in_eop_r1 && present_state_w == WRITE_DATA) || packet_drop
+        if (ref_in_eop_r1 && (write_state == WRITE_DATA)) begin
+            `uvm_info("COUNT_W_DEBUG", $sformatf("Time=%0t: Packet completed normally: resetting count_w from %0d to 0 (in_eop_r1=%0b, state=%0d)", 
+                     $time, ref_count_w, ref_in_eop_r1, write_state), UVM_LOW)
+            ref_count_w = 0;
         end
     endfunction
 
