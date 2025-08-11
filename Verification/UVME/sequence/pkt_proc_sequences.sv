@@ -251,8 +251,6 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 2: Controlled concurrent operations with proper packet boundaries
     `uvm_info(get_type_name(), "Phase 2: Controlled concurrent R/W operations", UVM_LOW)
-    bit [11:0] remaining_beats = 0;
-    bit [7:0] packet_id = 0;
     
     repeat (num_transactions) begin
       tr = pkt_proc_seq_item::type_id::create("tr_concurrent");
