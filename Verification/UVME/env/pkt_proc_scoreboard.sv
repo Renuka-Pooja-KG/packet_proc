@@ -193,12 +193,17 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // This uses the ref_wr_lvl_next calculated in the PREVIOUS cycle
         // UNLESS reset is active - then respond immediately like DUT
         if (!tr.pck_proc_int_mem_fsm_rstn) begin
-            // ASYNC RESET: Immediately set wr_lvl to 0 (matching DUT behavior)
-            if (ref_wr_lvl != 0) begin
-                `uvm_info("WR_LVL_RESET", $sformatf("Time=%0t: ASYNC RESET: ref_wr_lvl immediately set to 0 (matching DUT async reset)", 
+            // ASYNC RESET: Only set wr_lvl to 0 when DUT actually responds to reset
+            // This prevents premature reset assumption before DUT has time to propagate reset
+            if (tr.pck_proc_wr_lvl == 0 && ref_wr_lvl != 0) begin
+                `uvm_info("WR_LVL_RESET", $sformatf("Time=%0t: ASYNC RESET: ref_wr_lvl set to 0 (DUT wr_lvl=0, matching DUT reset response)", 
                          $time), UVM_LOW)
+                ref_wr_lvl = 0;
+            end else if (tr.pck_proc_wr_lvl != 0 && ref_wr_lvl != tr.pck_proc_wr_lvl) begin
+                // DUT hasn't responded to reset yet - keep current value until it does
+                `uvm_info("WR_LVL_RESET_WAIT", $sformatf("Time=%0t: RESET ASSERTED but DUT wr_lvl=%0d, keeping ref_wr_lvl=%0d until DUT responds", 
+                         $time, tr.pck_proc_wr_lvl, ref_wr_lvl), UVM_LOW)
             end
-            ref_wr_lvl = 0;
         end else begin
             // Normal operation: Update from previous cycle's calculation
             if (ref_wr_lvl != ref_wr_lvl_next) begin
@@ -769,7 +774,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end else begin
             // Reset is active: keep wr_lvl_next at 0 (matching DUT behavior)
             ref_wr_lvl_next = 0;
-            `uvm_info("WR_LVL_DEBUG", $sformatf("RESET ACTIVE: ref_wr_lvl_next kept at 0 (matching DUT reset behavior)", $time), UVM_LOW)
+            `uvm_info("WR_LVL_DEBUG", $sformatf("Time=%0t: RESET ACTIVE: ref_wr_lvl_next kept at 0 (matching DUT reset behavior)", $time), UVM_LOW)
         end
     endfunction
 
