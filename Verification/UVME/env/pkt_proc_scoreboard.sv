@@ -696,19 +696,22 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                      $time, pck_len_r2_value, ref_pck_len_valid_r1, ref_in_sop_r1, ref_pck_len_i_r1, ref_wr_data_r1[11:0], ref_packet_length_w), UVM_LOW)
         end
         
-        // CRITICAL FIX: Read operations should update based on CURRENT cycle deq_req AND correct FSM states
-        // This prevents ref_rd_data from being 1 cycle behind the DUT's rd_data_o
-        // Only update when in READ_HEADER or READ_DATA states (matching RTL behavior)
-        if (tr.deq_req && !ref_buffer_empty && (read_state == READ_HEADER || read_state == READ_DATA)) begin
+        // CRITICAL FIX: Read operations should update based on REGISTERED deq_req_r (matching RTL exactly)
+        // RTL uses deq_req_r (1-cycle delayed) to generate rd_en, so scoreboard must do the same
+        // This prevents the 1-cycle timing mismatch where rd_data_o is read even when deq_req=0
+        if (ref_deq_req_r && !ref_buffer_empty && (read_state == READ_HEADER || read_state == READ_DATA)) begin
             ref_rd_data_o = ref_buffer[ref_rd_ptr[13:0]];
             ref_rd_ptr = ref_rd_ptr + 1;
-            // NOTE: Do not increment ref_count_r here; count is driven by FSM on deq_req_r
+            `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: Read operation: deq_req_r=%0b, state=%0d, rd_data=0x%0h, ptr=%0d", 
+                     $time, ref_deq_req_r, read_state, ref_rd_data_o, ref_rd_ptr-1), UVM_LOW)
         end
 
-        // Packet length read aligns with deq_req_r in READ_HEADER (no extra delay)
-        if (read_state == READ_HEADER && tr.deq_req) begin
+        // Packet length read aligns with deq_req_r in READ_HEADER (matching RTL exactly)
+        if (read_state == READ_HEADER && ref_deq_req_r) begin
             ref_packet_length = ref_pck_len_buffer[ref_pck_len_rd_ptr[4:0]];
             ref_pck_len_rd_ptr = ref_pck_len_rd_ptr + 1;
+            `uvm_info("PKT_LEN_READ_DEBUG", $sformatf("Time=%0t: Packet length read: deq_req_r=%0b, pck_len=%0d, ptr=%0d", 
+                     $time, ref_deq_req_r, ref_packet_length, ref_pck_len_rd_ptr-1), UVM_LOW)
         end
         
         // Packet drop handling - now handled in update_packet_drop_logic()
@@ -837,28 +840,35 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_out_sop = 0;
         ref_out_eop = 0;
         
-        // Scoreboard mirrors RTL next_state/output timing using present_state and deq_req_r
-        // Outputs depend on present state and registered deq_req_r
+        // CRITICAL FIX: Scoreboard mirrors RTL exactly using present_state and deq_req_r
+        // RTL uses deq_req_r (1-cycle delayed) for count_r updates, so scoreboard must do the same
         unique case (read_state)
             IDLE_R: begin
                 ref_out_sop = 0;
                 ref_out_eop = 0;
             end
             READ_HEADER: begin
-                if (tr.deq_req) begin
+                if (ref_deq_req_r) begin  // ← Use registered version (matching RTL)
                     ref_out_sop = 1;
                     ref_out_eop = 0;
-                    // Start/advance packet counter on deq_req_r
+                    // Start/advance packet counter on deq_req_r (matching RTL exactly)
                     ref_count_r = ref_count_r + 1;
+                    `uvm_info("COUNT_DEBUG", $sformatf("Time=%0t: READ_HEADER count_r incremented to %0d (deq_req_r=%0b)", 
+                             $time, ref_count_r, ref_deq_req_r), UVM_LOW)
                 end
             end
             READ_DATA: begin
-                if (tr.deq_req) begin
+                if (ref_deq_req_r) begin  // ← Use registered version (matching RTL)
                     // Increment count on each dequeued data beat; assert eop on last beat
                     ref_count_r = ref_count_r + 1;
                     if (ref_count_r == (ref_packet_length)) begin
                         ref_out_eop = 1;
                         ref_count_r = 0; // packet boundary
+                        `uvm_info("COUNT_DEBUG", $sformatf("Time=%0t: READ_DATA count_r reset to 0 (packet complete, length=%0d)", 
+                                 $time, ref_packet_length), UVM_LOW)
+                    end else begin
+                        `uvm_info("COUNT_DEBUG", $sformatf("Time=%0t: READ_DATA count_r incremented to %0d (deq_req_r=%0b)", 
+                                 $time, ref_count_r, ref_deq_req_r), UVM_LOW)
                     end
                 end
             end
@@ -869,7 +879,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Debug out_sop calculation
         `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop/eop: state=%0d, deq_req_r=%0b, count_r=%0d, pck_len=%0d, out_sop=%0b, out_eop=%0b", 
-                 read_state, tr.deq_req, ref_count_r, ref_packet_length, ref_out_sop, ref_out_eop), UVM_LOW)
+                 read_state, ref_deq_req_r, ref_count_r, ref_packet_length, ref_out_sop, ref_out_eop), UVM_LOW)
     endfunction
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
@@ -910,9 +920,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             errors++;
         end
         
-        if (tr.deq_req && !ref_buffer_empty) begin
+        // CRITICAL FIX: Compare rd_data_o only when ref_deq_req_r is high (matching RTL timing)
+        // RTL generates rd_data_o based on deq_req_r, not the current cycle's deq_req
+        if (ref_deq_req_r && !ref_buffer_empty) begin
             if (tr.rd_data_o !== ref_rd_data_o) begin
-                `uvm_error("SCOREBOARD_NEW", $sformatf("rd_data_o mismatch: expected=0x%0h, got=0x%0h", ref_rd_data_o, tr.rd_data_o))
+                `uvm_error("SCOREBOARD_NEW", $sformatf("rd_data_o mismatch: expected=0x%0h, got=0x%0h (deq_req_r=%0b, state=%0d)", 
+                         ref_rd_data_o, tr.rd_data_o, ref_deq_req_r, read_state))
                 errors++;
             end
         end
