@@ -31,7 +31,7 @@ class packet_read_test extends uvm_test;
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Add idle cycles to ensure writes complete
-    send_idle_transactions(5);
+    seq.send_idle_transactions(5);
     
     // Test 2: Clean read operations (no random enq_req)
     `uvm_info(get_type_name(), "Test 2: Clean read operations", UVM_LOW)
@@ -46,7 +46,7 @@ class packet_read_test extends uvm_test;
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Add idle cycles to ensure writes complete
-    send_idle_transactions(5);
+    seq.send_idle_transactions(5);
     
     // Test 4: Extended read operations
     `uvm_info(get_type_name(), "Test 4: Extended read operations", UVM_LOW)
@@ -77,7 +77,7 @@ class packet_read_test extends uvm_test;
     // seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Final idle cycles to clean up
-    send_idle_transactions(5);
+    seq.send_idle_transactions(5);
     
     `uvm_info(get_type_name(), "Packet read test suite completed", UVM_LOW)
     phase.drop_objection(this);
