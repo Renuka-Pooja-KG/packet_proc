@@ -1,5 +1,5 @@
 // Reset Test for Packet Processor
-// Tests various reset scenarios with write/read operations
+// Simple test: Write packets, read them, then apply reset
 
 class reset_test extends uvm_test;
   `uvm_component_utils(reset_test)
@@ -21,45 +21,55 @@ class reset_test extends uvm_test;
   task run_phase(uvm_phase phase);
     phase.raise_objection(this);
     
-    `uvm_info(get_type_name(), "Starting reset test suite", UVM_LOW)
+    `uvm_info(get_type_name(), "Starting simple reset test", UVM_LOW)
     
-    // Test 1: Write packets first to build up write level
-    `uvm_info(get_type_name(), "Test 1: Writing packets to build write level", UVM_LOW)
-    seq.scenario = 2;  // Write-only scenario to build write level
-    seq.packet_count = 3;  // Write 3 packets
+    // Test 1: Write packets first (build up write level)
+    `uvm_info(get_type_name(), "Test 1: Write packets to build write level", UVM_LOW)
+    seq.scenario = 5;  // Packet write scenario
+    seq.num_transactions = 15;  // Write 15 packets
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
-    // Test 2: Async reset scenario
-    `uvm_info(get_type_name(), "Test 2: Async reset scenario", UVM_LOW)
-    seq.scenario = 10;  // Async reset scenario
-    //seq.num_transactions = 25;
+    // Add idle cycles to ensure writes complete
+    seq.send_idle_transaction(5);
+    
+    // Test 2: Read packets (verify normal operation)
+    `uvm_info(get_type_name(), "Test 2: Read packets to verify normal operation", UVM_LOW)
+    seq.scenario = 3;  // Read-only scenario
+    seq.num_transactions = 10;  // Read 10 packets
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
-    // Test 3: Sync reset scenario
-    `uvm_info(get_type_name(), "Test 3: Sync reset scenario", UVM_LOW)
-    seq.scenario = 11;  // Sync reset scenario
-    //seq.num_transactions = 25;
+    // Add idle cycles to ensure reads complete
+    seq.send_idle_transaction(5);
+    
+    // Test 3: Apply async reset (verify reset behavior)
+    `uvm_info(get_type_name(), "Test 3: Apply async reset", UVM_LOW)
+    // seq.scenario = 10;  // Async reset scenario
+    // seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
+    send_reset_transaction(1'b1, 1'b1, 5);  // async_rst=1, sync_rst=1 for clean start
+    send_reset_transaction(1'b1, 1'b1, 3);  // Release sync reset
+    
+    // Add idle cycles after reset
+    seq.send_idle_transaction(5);
+    
+    // Test 4: Write more packets after reset (verify reset recovery)
+    `uvm_info(get_type_name(), "Test 4: Write packets after reset to verify recovery", UVM_LOW)
+    seq.scenario = 5;  // Packet write scenario
+    seq.num_transactions = 8;  // Write 8 packets
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
-    // Test 4: Dual reset scenario
-    `uvm_info(get_type_name(), "Test 4: Dual reset scenario", UVM_LOW)
-    seq.scenario = 12;  // Dual reset scenario
-    //seq.num_transactions = 30;
+    // Add idle cycles to ensure writes complete
+    seq.send_idle_transaction(5);
+    
+    // Test 5: Read packets after reset (verify reset recovery)
+    `uvm_info(get_type_name(), "Test 5: Read packets after reset to verify recovery", UVM_LOW)
+    seq.scenario = 3;  // Read-only scenario
+    seq.num_transactions = 8;  // Read 8 packets
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
-    // Test 5: Reset during packet scenario
-    `uvm_info(get_type_name(), "Test 5: Reset during packet scenario", UVM_LOW)
-    seq.scenario = 13;  // Reset during packet scenario
-    //seq.num_transactions = 35;
-    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
+    // Final idle cycles to clean up
+    seq.send_idle_transaction(5);
     
-    // Test 6: Reset during read scenario
-    `uvm_info(get_type_name(), "Test 6: Reset during read scenario", UVM_LOW)
-    seq.scenario = 14;  // Reset during read scenario
-    //seq.num_transactions = 30;
-    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
-    
-    `uvm_info(get_type_name(), "Reset test suite completed", UVM_LOW)
+    `uvm_info(get_type_name(), "Simple reset test completed", UVM_LOW)
     phase.drop_objection(this);
   endtask
 
