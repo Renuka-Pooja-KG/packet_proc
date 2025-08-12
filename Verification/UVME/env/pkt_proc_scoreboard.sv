@@ -755,7 +755,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Case 1: Current cycle has both invalid condition AND enq_req (immediate packet drop)
         // Case 2: Invalid condition exists but enq_req=0, still set packet_drop=1 (persistent behavior)
         // CRITICAL FIX: RTL requires both invalid condition AND enq_req for pck_invalid
-        if (any_invalid_condition && tr.enq_req) begin
+        if (tr.packet_drop && any_invalid_condition && tr.enq_req) begin
             `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: pck_invalid: enq_req=1, state=%0d, invalid_1=%0b, invalid_3=%0b, invalid_4=%0b, invalid_5=%0b, invalid_6=%0b, count_w=%0d, pck_len_w=%0d, in_sop_r1=%0b, in_eop_r1=%0b",
                      $time, write_state, invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, ref_count_w, ref_packet_length_w, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
             
@@ -790,7 +790,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
             
             ref_packet_drop = 1;
-        end else if (any_invalid_condition && !tr.enq_req) begin
+        end else if (tr.packet_drop && any_invalid_condition && !tr.enq_req) begin
             // CRITICAL FIX: If invalid condition exists but enq_req=0, still set packet_drop=1
             // This matches RTL behavior where packet_drop persists once invalid condition is detected
             `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: Invalid condition detected but enq_req=0: invalid_1=%0b, invalid_3=%0b, invalid_4=%0b, invalid_5=%0b, invalid_6=%0b", 
