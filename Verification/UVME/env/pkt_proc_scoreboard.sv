@@ -46,6 +46,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_pck_proc_overflow, ref_pck_proc_underflow;
     bit ref_packet_drop;
     bit ref_packet_drop_prev;  // track rising edge of packet_drop for debug
+    bit invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, any_invalid_condition; // packet drop conditions
     
     // Expected outputs
     bit ref_out_sop, ref_out_eop;
@@ -137,6 +138,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_proc_underflow = 0;
         ref_packet_drop = 0;
         ref_packet_drop_prev = 0;
+        invalid_1 = 0;
+        invalid_3 = 0;
+        invalid_4 = 0;
+        invalid_5 = 0;
+        invalid_6 = 0;
+        any_invalid_condition = 0;
         
         // Initialize outputs
         ref_out_sop = 0;
@@ -408,6 +415,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_proc_underflow = 0;
             ref_packet_drop = 0;
             ref_packet_drop_prev = 0;
+            invalid_1 = 0;
+            invalid_3 = 0;
+            invalid_4 = 0;
+            invalid_5 = 0;
+            invalid_6 = 0;
+            any_invalid_condition = 0;
             ref_overflow = 0;
             
             // Reset outputs
@@ -477,6 +490,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_proc_underflow = 0;
             ref_packet_drop = 0;
             ref_packet_drop_prev = 0;
+            invalid_1 = 0;
+            invalid_3 = 0;
+            invalid_4 = 0;
+            invalid_5 = 0;
+            invalid_6 = 0;
+            any_invalid_condition = 0;
             ref_overflow = 0;
             
             // Reset outputs
@@ -707,26 +726,26 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Use WRITE-PATH packet length for these checks
         // CRITICAL FIX: Use registered values for invalid_1 to match DUT timing
         // DUT has registered versions of in_sop and in_eop, so invalid_1 should use _r1 values
-        bit invalid_1 = (ref_in_sop_r1 && ref_in_eop_r1);
-        bit invalid_3 = (tr.in_sop && (~ref_in_eop_r) && (write_state == WRITE_DATA));
+        invalid_1 = (ref_in_sop_r1 && ref_in_eop_r1);
+        invalid_3 = (tr.in_sop && (~ref_in_eop_r) && (write_state == WRITE_DATA));
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_4
         // invalid_4 = (count_w < (pck_len_r2 - 1)) && (pck_len_r2 != 0) && (in_eop_r1)
-        bit invalid_4 = (write_state == WRITE_DATA) && 
+        invalid_4 = (write_state == WRITE_DATA) && 
                         ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_5
         // invalid_5 = ((count_w == pck_len_r2-1) || (pck_len_r2 == 0)) && (~in_eop_r1) && (present_state_w==WRITE_DATA)
         // RTL uses pck_len_r2 (registered packet length) and in_eop_r1 (registered in_eop)
-        bit invalid_5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+        invalid_5 = (((ref_count_w == (ref_packet_length_w - 1)) || (ref_packet_length_w == 0)) && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
         // CRITICAL FIX: invalid_6 should detect overflow immediately when buffer is full and write is attempted
         // This ensures pck_invalid is detected in the same cycle as the DUT, without circular dependency
         // invalid_6 = (enq_req && buffer_full) - immediate overflow detection
         // NOTE: Use current cycle buffer_full for immediate detection, not delayed version
-        bit invalid_6 = (tr.enq_req && ref_buffer_full);
+        invalid_6 = (tr.enq_req && ref_buffer_full);
 
         // CRITICAL FIX: Track invalid conditions across cycles to match DUT behavior
         // The DUT's pck_invalid requires both invalid condition AND enq_req, but the timing might be different
         // We need to detect invalid conditions and then assert packet_drop when enq_req is high
-        bit any_invalid_condition = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6);
+        any_invalid_condition = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6);
         
         // Debug: Show condition calculations that use ref_packet_length_w
         `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && ref_in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
