@@ -73,7 +73,7 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
     input out_eop;
     input pck_proc_overflow;
     input pck_proc_underflow;
-    input packet_drop;
+   // input packet_drop;
     input pck_proc_wr_lvl;
 
     //Monitoring the inputs to the DUT 
@@ -97,6 +97,7 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
   //Modport to the monitor
   modport monitor_mp (clocking monitor_cb, input pck_proc_int_mem_fsm_rstn, 
                      input pck_proc_full, input pck_proc_empty, 
-                     input pck_proc_almost_full, input pck_proc_almost_empty);
+                     input pck_proc_almost_full, input pck_proc_almost_empty,
+                     input packet_drop);
 
 endinterface

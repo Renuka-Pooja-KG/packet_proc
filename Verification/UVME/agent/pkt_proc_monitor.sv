@@ -64,8 +64,8 @@ class pkt_proc_monitor extends uvm_monitor;
       tr.pck_proc_wr_lvl = vif.pck_proc_wr_lvl;
       
       // Debug: Show captured values
-      `uvm_info("MONITOR_DEBUG", $sformatf("Captured at %0t: pck_proc_empty=%0b, pck_proc_almost_empty=%0b, pck_proc_wr_lvl=%0d", 
-               $time, tr.pck_proc_empty, tr.pck_proc_almost_empty, tr.pck_proc_wr_lvl), UVM_LOW)
+      `uvm_info("MONITOR_DEBUG", $sformatf("Captured at %0t: pck_proc_empty=%0b, pck_proc_almost_empty=%0b, pck_proc_wr_lvl=%0d, packet_drop=%0b", 
+               $time, tr.pck_proc_empty, tr.pck_proc_almost_empty, tr.pck_proc_wr_lvl, tr.packet_drop), UVM_LOW)
       
       // Determine operation type based on captured signals
       //determine_operation_type();
