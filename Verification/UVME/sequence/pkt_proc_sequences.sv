@@ -753,23 +753,25 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
 
     // Phase 3: Trigger invalid_3 condition - assert in_sop while in WRITE_DATA state
     `uvm_info(get_type_name(), "Phase 3: Triggering invalid_3 (in_sop=1 while in WRITE_DATA state)", UVM_LOW)
-    tr = pkt_proc_seq_item::type_id::create("tr_invalid_3_trigger");
-    start_item(tr);
-    assert(tr.randomize() with {
-      pck_proc_int_mem_fsm_rstn == 1'b1;
-      pck_proc_int_mem_fsm_sw_rstn == 1'b0;
-      empty_de_assert == 1'b0;
-      pck_proc_almost_full_value == local::almost_full_value;
-      pck_proc_almost_empty_value == local::almost_empty_value;
-      enq_req == 1'b1;
-      deq_req == 1'b0;
-      in_sop == 1'b1;        // Start of packet (INVALID - already processing a packet!)
-      in_eop == 1'b0;        // Not end of packet
-      wr_data_i == 32'hB006;
-      pck_len_valid == 1'b1;
-      pck_len_i == 12'h0005; // New packet length
-    });
-    finish_item(tr);
+    // tr = pkt_proc_seq_item::type_id::create("tr_invalid_3_trigger");
+    // start_item(tr);
+    // assert(tr.randomize() with {
+    //   pck_proc_int_mem_fsm_rstn == 1'b1;
+    //   pck_proc_int_mem_fsm_sw_rstn == 1'b0;
+    //   empty_de_assert == 1'b0;
+    //   pck_proc_almost_full_value == local::almost_full_value;
+    //   pck_proc_almost_empty_value == local::almost_empty_value;
+    //   enq_req == 1'b1;
+    //   deq_req == 1'b0;
+    //   in_sop == 1'b1;        // Start of packet (INVALID - already processing a packet!)
+    //   in_eop == 1'b0;        // Not end of packet
+    //   wr_data_i == 32'hB006;
+    //   pck_len_valid == 1'b1;
+    //   pck_len_i == 12'h0005; // New packet length
+    // });
+    // finish_item(tr);
+
+    write_packet(5, 32'hB006);
     
     // Phase 4: Wait for packet drop processing
     `uvm_info(get_type_name(), "Phase 4: Waiting for packet drop processing", UVM_LOW)
