@@ -709,7 +709,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_4
         // invalid_4 = (count_w < (pck_len_r2 - 1)) && (pck_len_r2 != 0) && (in_eop_r1)
         bit invalid_4 = (write_state == WRITE_DATA) && 
-                        ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (tr.in_eop));
+                        ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r));
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_5
         // invalid_5 = ((count_w == pck_len_r2-1) || (pck_len_r2 == 0)) && (~in_eop_r1) && (present_state_w==WRITE_DATA)
         // RTL uses pck_len_r2 (registered packet length) and in_eop_r1 (registered in_eop)
