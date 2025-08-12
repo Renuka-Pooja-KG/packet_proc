@@ -693,6 +693,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_packet_drop_logic(pkt_proc_seq_item tr);
+         // CRITICAL: Reset packet_drop to 0 EVERY cycle (matching RTL always_comb)
+            ref_packet_drop = 0;  // Default value every cycle
+        
         // Calculate packet drop logic (matching RTL exactly)
         // pck_invalid = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6) && enq_req
         // invalid_1 = in_sop && in_eop
