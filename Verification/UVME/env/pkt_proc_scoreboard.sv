@@ -42,7 +42,6 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit [11:0] ref_packet_length;      // Current packet length (from read path)
     bit [11:0] ref_packet_length_w;    // Write path packet length (for pck_invalid checks)
     bit [11:0] ref_count_w_prev;       // Previous cycle's count_w for packet drop calculations
-    bit [11:0] ref_count_w;       // Next cycle's count_w value (for clock-triggered updates)
     bit ref_buffer_full, ref_buffer_empty;
     bit ref_pck_len_full, ref_pck_len_empty;
     bit ref_pck_proc_overflow, ref_pck_proc_underflow;
