@@ -42,6 +42,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit [11:0] ref_packet_length;      // Current packet length (from read path)
     bit [11:0] ref_packet_length_w;    // Write path packet length (for pck_invalid checks)
     bit [11:0] ref_count_w_prev;       // Previous cycle's count_w for packet drop calculations
+    bit [11:0] ref_count_w;       // Next cycle's count_w value (for clock-triggered updates)
     bit ref_buffer_full, ref_buffer_empty;
     bit ref_pck_len_full, ref_pck_len_empty;
     bit ref_pck_proc_overflow, ref_pck_proc_underflow;
@@ -193,20 +194,29 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     function void write(pkt_proc_seq_item tr);
         total_transactions++;
         
-        `uvm_info("SCOREBOARD_NEW", $sformatf("Processing transaction #%0d", total_transactions), UVM_LOW)
+        `uvm_info("SCOREBOARD_NEW", $sformatf("Processing transaction #%0d (type: packet_drop_detected=%0b, clock_edge=%0b)", 
+                 total_transactions, tr.packet_drop_detected, tr.clock_edge), UVM_LOW)
         
-        // Update reference model
-        update_reference_model(tr);
-        
-        // Compare outputs (using current cycle's ref_wr_lvl value)
-        compare_outputs(tr);
-        
-        // CRITICAL FIX: Update ref_wr_lvl AFTER comparison for next cycle use
-        // This ensures comparison uses current cycle value, but wr_lvl is ready for next cycle
-        if (ref_wr_lvl_next != ref_wr_lvl) begin
-            `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: Updating wr_lvl after comparison: %0d -> %0d (for next cycle)", 
-                     $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
-            ref_wr_lvl = ref_wr_lvl_next;
+        if (tr.packet_drop_detected) begin
+            // packet_drop detected: Only detect packet_drop, don't update wr_lvl
+            `uvm_info("PKT_DROP_TRANSACTION", $sformatf("Time=%0t: Processing packet_drop detection transaction", $time), UVM_LOW)
+            update_packet_drop_logic(tr);
+            // DO NOT update ref_wr_lvl here - let clock edge transactions handle it
+        end else if (tr.clock_edge) begin
+            // Clock edge: Full reference model update including wr_lvl
+            `uvm_info("CLOCK_EDGE_TRANSACTION", $sformatf("Time=%0t: Processing clock edge transaction", $time), UVM_LOW)
+            update_reference_model(tr);
+            compare_outputs(tr);
+            // wr_lvl updates happen here for clock edge transactions
+            if (ref_wr_lvl_next != ref_wr_lvl) begin
+                `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: Updating wr_lvl after comparison: %0d -> %0d (for next cycle)", 
+                         $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
+                ref_wr_lvl = ref_wr_lvl_next;
+            end
+        end else begin
+            // Unknown transaction type - log error
+            `uvm_error("UNKNOWN_TRANSACTION", $sformatf("Time=%0t: Unknown transaction type - packet_drop_detected=%0b, clock_edge=%0b", 
+                     $time, tr.packet_drop_detected, tr.clock_edge))
         end
     endfunction
 

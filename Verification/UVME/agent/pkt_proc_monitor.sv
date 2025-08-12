@@ -22,15 +22,20 @@ class pkt_proc_monitor extends uvm_monitor;
     `uvm_info(get_type_name(), "Pkt_proc Monitor run phase started", UVM_LOW)
     
     forever begin
-      // Wait for EITHER clock edge OR ANY combinational output change
-      // This ensures we capture all combinational signals immediately when they change
+      // Wait for EITHER clock edge OR packet_drop change
       @(posedge vif.pck_proc_int_mem_fsm_clk or vif.packet_drop);
       
-       // Simple trigger detection
+      // Determine transaction type based on what triggered the sampling
       if (vif.packet_drop !== tr.packet_drop) begin
+        // packet_drop detected: send special transaction for detection only
         `uvm_info("PACKET_DROP_CHANGE", $sformatf("Time=%0t: packet_drop changed to %0b", $time, vif.packet_drop), UVM_LOW)
+        tr.packet_drop_detected = 1;  // Flag for packet_drop detection
+        tr.clock_edge = 0;            // Not a clock edge transaction
       end else begin
+        // Clock edge: normal sampling and wr_lvl updates
         `uvm_info("CLOCK_TRIGGER", $sformatf("Time=%0t: Sampling triggered by posedge clock", $time), UVM_LOW)
+        tr.packet_drop_detected = 0;  // Not a packet_drop detection
+        tr.clock_edge = 1;            // Flag for clock edge transaction
       end
 
       sample_all_signals();

@@ -43,6 +43,10 @@ class pkt_proc_seq_item extends uvm_sequence_item;
   bit packet_drop;
   bit [14:0] pck_proc_wr_lvl;
 
+  // Transaction type flags for Alternative 4 implementation
+  bit packet_drop_detected;  // Flag for packet_drop detection transactions
+  bit clock_edge;            // Flag for clock edge transactions
+
 //   // Operation type control
 //   typedef enum {WRITE_OP, READ_OP, BOTH_OP} operation_type_e;
 //   rand operation_type_e op_type;
@@ -124,6 +128,8 @@ class pkt_proc_seq_item extends uvm_sequence_item;
     `uvm_field_int(pck_proc_underflow, UVM_ALL_ON)
     `uvm_field_int(packet_drop, UVM_ALL_ON)
     `uvm_field_int(pck_proc_wr_lvl, UVM_ALL_ON)
+    `uvm_field_int(packet_drop_detected, UVM_ALL_ON)
+    `uvm_field_int(clock_edge, UVM_ALL_ON)
     //`uvm_field_enum(operation_type_e, op_type, UVM_ALL_ON)
   `uvm_object_utils_end
 
