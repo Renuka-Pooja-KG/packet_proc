@@ -222,14 +222,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 `uvm_info("WR_LVL_RESET_WAIT", $sformatf("Time=%0t: RESET ASSERTED but DUT wr_lvl=%0d, keeping ref_wr_lvl=%0d until DUT responds", 
                          $time, tr.pck_proc_wr_lvl, ref_wr_lvl), UVM_LOW)
             end
-        end else begin
-            // Normal operation: Update from previous cycle's calculation
-            if (ref_wr_lvl != ref_wr_lvl_next) begin
-                `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: ref_wr_lvl updated from %0d to %0d (matching RTL clock edge behavior)", 
-                         $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
-            end
-            ref_wr_lvl = ref_wr_lvl_next;
         end
+        
+        // CRITICAL FIX: ref_wr_lvl is NOT updated here to prevent 1-cycle early behavior
+        // It will be updated at the END of the cycle to match RTL's always_ff timing
         
         // Apply one-cycle delay FIRST (use previous cycle's values for comparison)
         ref_buffer_empty_delayed = ref_buffer_empty;
