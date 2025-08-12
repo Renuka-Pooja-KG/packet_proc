@@ -901,7 +901,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             if (ref_packet_drop) begin
                 // CRITICAL FIX: Use previous cycle's count_w for packet drop decrement
                 // This matches RTL behavior where packet drop uses the count from previous cycle
-                ref_wr_lvl_next = ref_wr_lvl - ref_count_w_prev;
+                ref_wr_lvl_next = ref_wr_lvl - ref_count_w_prev + 1;
                 
                 `uvm_info("WR_LVL_DROP_DEBUG", $sformatf("Time=%0t: Packet drop wr_lvl calc: current=%0d, prev_count_w=%0d, next=%0d", 
                          $time, ref_wr_lvl, ref_count_w_prev, ref_wr_lvl_next), UVM_LOW)
