@@ -852,6 +852,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     // Phase 4: Wait for packet drop processing
     `uvm_info(get_type_name(), "Phase 4: Waiting for packet drop processing", UVM_LOW)
     send_idle_transaction(5);
+
+    write_packet(5, 32'hC004);
     
     `uvm_info(get_type_name(), "Invalid_4 scenario completed - Packet drop expected", UVM_LOW)
   endtask
