@@ -709,7 +709,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_4
         // invalid_4 = (count_w < (pck_len_r2 - 1)) && (pck_len_r2 != 0) && (in_eop_r1)
         bit invalid_4 = (write_state == WRITE_DATA) && 
-                        ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r));
+                        ((ref_count_w < (ref_packet_length_w - 1)) && (ref_packet_length_w != 0) && (ref_in_eop_r1));
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_5
         // invalid_5 = ((count_w == pck_len_r2-1) || (pck_len_r2 == 0)) && (~in_eop_r1) && (present_state_w==WRITE_DATA)
         // RTL uses pck_len_r2 (registered packet length) and in_eop_r1 (registered in_eop)
@@ -726,8 +726,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         bit any_invalid_condition = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6);
         
         // Debug: Show condition calculations that use ref_packet_length_w
-        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
-                 $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, tr.in_sop, ref_in_eop_r, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
+        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && ref_in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
+                 $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, tr.in_sop, ref_in_eop_r, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
 
         // CRITICAL FIX: Packet drop logic now handles only current cycle invalid conditions
         // Case 1: Current cycle has both invalid condition AND enq_req (immediate packet drop)
