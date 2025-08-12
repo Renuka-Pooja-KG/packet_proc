@@ -826,7 +826,6 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
         pck_len_i == 12'h0000;
       });
       finish_item(tr);
-      send_idle_transaction(1);
     end
     
     // Phase 3: Trigger invalid_4 with premature end of packet
