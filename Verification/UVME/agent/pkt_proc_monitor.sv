@@ -58,7 +58,8 @@ class pkt_proc_monitor extends uvm_monitor;
       tr.pck_proc_almost_empty = vif.pck_proc_almost_empty;
       tr.pck_proc_overflow = vif.monitor_cb.pck_proc_overflow;
       tr.pck_proc_underflow = vif.monitor_cb.pck_proc_underflow;
-      tr.packet_drop = vif.monitor_cb.packet_drop;
+      //tr.packet_drop = vif.monitor_cb.packet_drop;
+      tr.packet_drop = vif.packet_drop;
       //tr.pck_proc_wr_lvl = vif.monitor_cb.pck_proc_wr_lvl;
       tr.pck_proc_wr_lvl = vif.pck_proc_wr_lvl;
       
