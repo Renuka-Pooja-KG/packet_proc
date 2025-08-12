@@ -664,7 +664,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Use WRITE-PATH packet length for these checks
         // CRITICAL FIX: Use registered values for invalid_1 to match DUT timing
         // DUT has registered versions of in_sop and in_eop, so invalid_1 should use _r1 values
-        bit invalid_1 = (ref_in_sop && ref_in_eop);
+        bit invalid_1 = (ref_in_sop_r1 && ref_in_eop_r1);
         bit invalid_3 = (tr.in_sop && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
         // CRITICAL FIX: Use current cycle in_eop, not previous cycle in_eop_r1
         // invalid_4 should only trigger when we're CURRENTLY ending a packet, not based on previous packet completion
