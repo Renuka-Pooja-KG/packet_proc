@@ -747,9 +747,10 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
         pck_len_i == 12'h0000;
       });
       finish_item(tr);
-      send_idle_transaction(1);
     end
     
+    //send_idle_transaction(5);
+
     // Phase 3: Trigger invalid_3 condition - assert in_sop while in WRITE_DATA state
     `uvm_info(get_type_name(), "Phase 3: Triggering invalid_3 (in_sop=1 while in WRITE_DATA state)", UVM_LOW)
     tr = pkt_proc_seq_item::type_id::create("tr_invalid_3_trigger");
