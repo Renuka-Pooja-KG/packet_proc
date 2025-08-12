@@ -65,11 +65,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_buffer_empty_r;
     bit ref_wr_en, ref_rd_en;
     bit ref_wr_en_prev;  // Previous cycle's write enable
+    bit ref_rd_en_prev;  // Previous cycle's read enable
+    bit ref_deq_req_prev;  // Previous cycle's dequeue request (for out_sop timing)
     
     // Read pipeline delay (matching DUT timing)
-    bit ref_rd_en_prev;  // Previous cycle's read enable
     //bit [31:0] ref_rd_data_delayed;  // Delayed read data output
-    bit ref_deq_req_prev;  // Previous cycle's dequeue request (for out_sop timing)
     bit ref_deq_req_prev2;  // Two cycles ago dequeue request (for out_sop timing)
     bit ref_buffer_full_prev;   // Previous cycle's buffer_full
     bit ref_buffer_empty_prev;  // Previous cycle's buffer_empty
@@ -158,8 +158,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_rd_en = 0;
         ref_wr_en_prev = 0;
         ref_rd_en_prev = 0;
-        //ref_rd_data_delayed = 0;
         ref_deq_req_prev = 0;
+        //ref_rd_data_delayed = 0;
         ref_deq_req_prev2 = 0;
         ref_buffer_full_prev = 0;
         ref_buffer_empty_prev = 1;
@@ -285,8 +285,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         generate_write_read_enables(tr);
         
         // Debug state alignment for write enable generation
-        `uvm_info("STATE_ALIGNMENT", $sformatf("Time=%0t: State alignment - Scoreboard write_state=%0d, DUT present_state=%0d, ref_wr_en=%0b, enq_req=%0b", 
-                 $time, write_state, tr.pck_proc_int_mem_fsm_rstn ? 0 : 2, ref_wr_en, tr.enq_req), UVM_LOW)
+        `uvm_info("STATE_ALIGNMENT", $sformatf("Time=%0t: State alignment - Scoreboard write_state=%0d, DUT present_state=%0d, ref_wr_en=%0b, enq_req_r=%0b, enq_req_curr=%0b", 
+                 $time, write_state, tr.pck_proc_int_mem_fsm_rstn ? 0 : 2, ref_wr_en, ref_enq_req_r, tr.enq_req), UVM_LOW)
+        
+        // Additional debug: Show when registered enq_req is used
+        if (ref_enq_req_r != tr.enq_req) begin
+            `uvm_info("ENQ_REQ_TIMING", $sformatf("Time=%0t: enq_req changed: registered=%0b -> curr=%0b, using registered for wr_en=%0b", 
+                     $time, ref_enq_req_r, tr.enq_req, ref_wr_en), UVM_LOW)
+        end
         
         // Update write level based on current enables AFTER buffer operations (matching RTL order)
         update_write_level_next();
@@ -631,16 +637,19 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_wr_en = 0;  // No write when packet is invalid
             `uvm_info("WR_EN_DEBUG", $sformatf("Time=%0t: Packet drop detected - setting wr_en=0 to prevent invalid packet write", $time), UVM_LOW)
         end else begin
-            // Normal wr_en logic based on FSM state and enq_req
+            // CRITICAL FIX: Use ref_enq_req_r1 (1-cycle delayed) to match RTL exactly
+            // RTL uses enq_req_r1 (1-cycle delayed enq_req) for wr_en generation
             case (write_state)
                 IDLE_W: begin
                     ref_wr_en = 0;
                 end
                 WRITE_HEADER: begin
-                    ref_wr_en = (tr.enq_req) ? 1 : 0;
+                    // RTL: wr_en = (enq_req_r) ? 1 : 0
+                    ref_wr_en = (ref_enq_req_r1) ? 1 : 0;
                 end
                 WRITE_DATA: begin
-                    ref_wr_en = (tr.enq_req) ? 1 : 0;
+                    // RTL: wr_en = (enq_req_r) ? 1 : 0
+                    ref_wr_en = (ref_enq_req_r1) ? 1 : 0;
                 end
                 default: begin
                     ref_wr_en = 0;
@@ -664,8 +673,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
         endcase
         
-        `uvm_info("WR_RD_EN_DEBUG", $sformatf("Time=%0t: Generated - wr_en=%0b (packet_drop=%0b, state=%0d, enq_req=%0b), rd_en=%0b (state=%0d, deq_req=%0b)", 
-                 $time, ref_wr_en, ref_packet_drop, write_state, tr.enq_req, ref_rd_en, read_state, tr.deq_req), UVM_LOW)
+        `uvm_info("WR_RD_EN_DEBUG", $sformatf("Time=%0t: Generated - wr_en=%0b (packet_drop=%0b, state=%0d, enq_req_r=%0b, enq_req_curr=%0b), rd_en=%0b (state=%0d, deq_req=%0b)", 
+                 $time, ref_wr_en, ref_packet_drop, write_state, ref_enq_req_r, tr.enq_req, ref_rd_en, read_state, tr.deq_req), UVM_LOW)
     endfunction
 
     function void update_packet_drop_logic(pkt_proc_seq_item tr);
@@ -702,7 +711,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         bit any_invalid_condition = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6);
         
         // Debug: Show condition calculations that use ref_packet_length_w
-        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop_r=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
+        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (in_sop=%0b && ~in_eop_r=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
                  $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, tr.in_sop, ref_in_eop_r, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
 
         // CRITICAL FIX: Packet drop logic now handles only current cycle invalid conditions
