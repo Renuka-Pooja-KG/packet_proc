@@ -35,13 +35,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit [11:0] ref_pck_len_wr_ptr;   // Packet length FIFO write pointer
     bit [11:0] ref_pck_len_rd_ptr;   // Packet length FIFO read pointer
     bit [14:0] ref_wr_lvl;           // Write level (matching RTL output)
-    bit [11:0] ref_count_w;          // Write counter (matching RTL count_w)
     bit [11:0] ref_count_r;          // Read counter (matching RTL count_r)
     
     // Packet length tracking
     bit [11:0] ref_packet_length;      // Current packet length (from read path)
     bit [11:0] ref_packet_length_w;    // Write path packet length (for pck_invalid checks)
     bit [11:0] ref_count_w_prev;       // Previous cycle's count_w for packet drop calculations
+    bit [11:0] ref_count_w;            // Current cycle's count_w value
+    bit [11:0] ref_count_w_next;       // Next cycle's count_w value (for proper timing)
     bit ref_buffer_full, ref_buffer_empty;
     bit ref_pck_len_full, ref_pck_len_empty;
     bit ref_pck_proc_overflow, ref_pck_proc_underflow;
@@ -118,8 +119,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_len_wr_ptr = 0;
         ref_pck_len_rd_ptr = 0;
         ref_wr_lvl = 0;
-        ref_count_w = 0;
-        ref_count_w_prev = 0;  // Initialize previous count_w
+        ref_count_w = 0;            // Current count_w starts at 0
+        ref_count_w_next = 0;       // Next count_w starts at 0
+        ref_count_w_prev = 0;       // Initialize previous count_w
         ref_count_r = 0;
         ref_packet_length = 0;
         ref_packet_length_w = 0;
@@ -206,11 +208,16 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             `uvm_info("CLOCK_EDGE_TRANSACTION", $sformatf("Time=%0t: Processing clock edge transaction", $time), UVM_LOW)
             update_reference_model(tr);
             compare_outputs(tr);
-            // wr_lvl updates happen here for clock edge transactions
+            // wr_lvl and count_w updates happen here for clock edge transactions
             if (ref_wr_lvl_next != ref_wr_lvl) begin
                 `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: Updating wr_lvl after comparison: %0d -> %0d (for next cycle)", 
                          $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
                 ref_wr_lvl = ref_wr_lvl_next;
+            end
+            if (ref_count_w_next != ref_count_w) begin
+                `uvm_info("COUNT_W_UPDATE", $sformatf("Time=%0t: Updating count_w after comparison: %0d -> %0d (for next cycle)", 
+                         $time, ref_count_w, ref_count_w_next), UVM_LOW)
+                ref_count_w = ref_count_w_next;
             end
         end else begin
             // Unknown transaction type - log error
@@ -260,10 +267,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             
             // CRITICAL FIX: RTL uses always_ff, so wr_lvl updates at NEXT clock edge
             // The wr_lvl_next calculation is handled in update_write_level_next()
-            // Here we just reset count_w for next packet (matching RTL)
-            ref_count_w = 0;
+            // Here we just calculate count_w_next for next packet (matching RTL)
+            ref_count_w_next = 0;
             
-            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP: count_w reset to 0, wr_lvl_next will be calculated in update_write_level_next()", 
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP: count_w_next set to 0, wr_lvl_next will be calculated in update_write_level_next()", 
                      $time), UVM_LOW)
         end
         
@@ -399,8 +406,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_len_wr_ptr = 0;
             ref_pck_len_rd_ptr = 0;
             ref_wr_lvl = 0;
+            ref_count_w_next = 0;       // Set next count_w to 0
             ref_count_w = 0;
-            ref_count_w_prev = 0;  // Initialize previous count_w
+            ref_count_w_prev = 0;       // Initialize previous count_w
             ref_count_r = 0;
             ref_packet_length = 0;
             ref_packet_length_w = 0;
@@ -472,8 +480,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_len_wr_ptr = 0;
             ref_pck_len_rd_ptr = 0;
             ref_wr_lvl = 0;
-            ref_count_w = 0;
-            ref_count_w_prev = 0;  // Initialize previous count_w
+            ref_count_w = 0;       // Set next count_w to 0
+            ref_count_w_next = 0;       // Set next count_w to 0
+            ref_count_w_prev = 0;       // Initialize previous count_w
             ref_count_r = 0;
             ref_packet_length = 0;
             ref_packet_length_w = 0;
@@ -821,10 +830,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 
                 // CRITICAL FIX: Buffer write operations (only if not packet drop)
                 if (ref_wr_en && !ref_buffer_full && !ref_packet_drop) begin
-                  // CRITICAL FIX: Only increment count_w if not packet drop
-                    ref_count_w = ref_count_w + 1;
-                    `uvm_info("COUNT_W_DEBUG", $sformatf("Time=%0t: count_w incremented to %0d (state=%0d, wr_en=%0b, wr_lvl=%0d, buffer[%0d]=0x%0h)", 
-                             $time, ref_count_w, write_state, ref_wr_en, ref_wr_lvl, ref_wr_lvl[13:0], ref_wr_data_r1), UVM_LOW)
+                  // CRITICAL FIX: Only increment count_w_next if not packet drop
+                    ref_count_w_next = ref_count_w + 1;
+                    `uvm_info("COUNT_W_DEBUG", $sformatf("Time=%0t: count_w_next set to %0d (state=%0d, wr_en=%0b, wr_lvl=%0d, buffer[%0d]=0x%0h)", 
+                             $time, ref_count_w_next, write_state, ref_wr_en, ref_wr_lvl, ref_wr_lvl[13:0], ref_wr_data_r1), UVM_LOW)
                 end
             end
             
@@ -890,7 +899,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         if (ref_in_eop_r1 && (write_state == WRITE_DATA)) begin
             `uvm_info("COUNT_W_DEBUG", $sformatf("Time=%0t: Packet completed normally: resetting count_w from %0d to 0 (in_eop_r1=%0b, state=%0d)", 
                      $time, ref_count_w, ref_in_eop_r1, write_state), UVM_LOW)
-            ref_count_w = 0;
+            ref_count_w_next = 0;
         end
     endfunction
 
