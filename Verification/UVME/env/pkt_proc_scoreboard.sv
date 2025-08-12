@@ -228,9 +228,6 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Handle reset logic FIRST (matching RTL behavior)
         handle_reset_logic(tr);
         
-        // Generate write/read enables FIRST (matching RTL order)
-        generate_write_read_enables(tr);
-        
         // CRITICAL FIX: Packet drop logic must be executed BEFORE FSM state computation
         // RTL detects invalid packets first, then decides FSM behavior accordingly
         update_packet_drop_logic(tr);
@@ -282,6 +279,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Update internal overflow signal
         update_internal_overflow();
+        
+        // CRITICAL FIX: Generate write/read enables AFTER FSM state update
+        // This ensures ref_wr_en uses the CURRENT state that matches the DUT
+        generate_write_read_enables(tr);
+        
+        // Debug state alignment for write enable generation
+        `uvm_info("STATE_ALIGNMENT", $sformatf("Time=%0t: State alignment - Scoreboard write_state=%0d, DUT present_state=%0d, ref_wr_en=%0b, enq_req=%0b", 
+                 $time, write_state, tr.pck_proc_int_mem_fsm_rstn ? 0 : 2, ref_wr_en, tr.enq_req), UVM_LOW)
         
         // Update write level based on current enables AFTER buffer operations (matching RTL order)
         update_write_level_next();
