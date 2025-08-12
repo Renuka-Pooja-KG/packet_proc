@@ -33,7 +33,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   int max_packet_length = 16;
   int current_packet_length;
   int current_packet_word_count;
-
+  
   bit [11:0] remaining_beats = 0;
   bit [7:0] packet_id = 0;
   
@@ -573,7 +573,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   task reset_during_read_scenario();
     `uvm_info(get_type_name(), "Starting reset during read scenario", UVM_LOW)
     
-     initialize_dut();
+    initialize_dut();
     
     // Start writing a packet
     current_packet_length = 8;
@@ -654,7 +654,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
 
         // Apply reset during packet transmission
         send_reset_transaction(1'b1, 1'b1, 3);
-        send_reset_transaction(1'b1, 1'b0, 2);
+    send_reset_transaction(1'b1, 1'b0, 2);
 
         write_packet(6, 32'hF800);
   endtask

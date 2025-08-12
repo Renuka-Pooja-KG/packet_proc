@@ -493,7 +493,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                     write_state_next = IDLE_W;
                 end
             end
-
+            
             WRITE_HEADER: begin
                 // Use current cycle values (matching RTL behavior exactly)
                 if (tr.in_sop) begin
@@ -509,7 +509,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_DATA (advance to data)", $time), UVM_LOW)
                 end
             end
-
+            
             WRITE_DATA: begin
                 // Use current cycle values (matching RTL behavior exactly)
                 if (tr.enq_req && tr.in_sop) begin
@@ -524,7 +524,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                     write_state_next = WRITE_DATA;
                 end
             end
-
+            
             ERROR: begin
                 write_state_next = IDLE_W;
                 `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: ERROR -> IDLE_W (error recovery)", $time), UVM_LOW)
@@ -549,12 +549,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                     read_state_next = IDLE_R;
                 end
             end
-
+            
             READ_HEADER: begin
                 read_state_next = READ_DATA;
                 `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_HEADER -> READ_DATA (advance to data)", $time), UVM_LOW)
             end
-
+            
             READ_DATA: begin
                 if (ref_buffer_empty) begin
                     read_state_next = IDLE_R;
@@ -636,6 +636,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // CRITICAL FIX: Packet drop logic now handles both immediate and delayed invalid conditions
         // Case 1: Current cycle has both invalid condition AND enq_req (immediate packet drop)
         // Case 2: Previous cycle had invalid condition AND current cycle has enq_req (delayed packet drop)
+        // Case 3: Invalid condition detected, packet_drop should remain 1 until reset (persistent behavior)
         if (tr.enq_req && (any_invalid_condition || ref_invalid_condition_prev)) begin
             `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: pck_invalid: enq_req=1, state=%0d, invalid_1=%0b, invalid_3=%0b, invalid_4=%0b, invalid_5=%0b, invalid_6=%0b, prev_invalid=%0b, count_w=%0d, pck_len_w=%0d, in_sop_r1=%0b, in_eop_r1=%0b",
                      $time, write_state, invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, ref_invalid_condition_prev, ref_count_w, ref_packet_length_w, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
@@ -652,6 +653,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                          $time, tr.enq_req, ref_buffer_full), UVM_LOW)
             end
             
+            ref_packet_drop = 1;
+        end else if (any_invalid_condition || ref_invalid_condition_prev) begin
+            // CRITICAL FIX: If invalid condition exists but enq_req=0, still set packet_drop=1
+            // This matches RTL behavior where packet_drop persists once invalid condition is detected
+            `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: Invalid condition detected but enq_req=0: invalid_1=%0b, invalid_3=%0b, invalid_4=%0b, invalid_5=%0b, invalid_6=%0b, prev_invalid=%0b", 
+                     $time, invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, ref_invalid_condition_prev), UVM_LOW)
             ref_packet_drop = 1;
         end else begin
             ref_packet_drop = 0;
@@ -722,11 +729,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: Read operation: deq_req_r=%0b, state=%0d, rd_data=0x%0h, ptr=%0d", 
                      $time, ref_deq_req_r, read_state, ref_rd_data_o, ref_rd_ptr-1), UVM_LOW)
         end
-
+            
         // Packet length read aligns with deq_req_r in READ_HEADER (matching RTL exactly)
         if (read_state == READ_HEADER && ref_deq_req_r) begin
-            ref_packet_length = ref_pck_len_buffer[ref_pck_len_rd_ptr[4:0]];
-            ref_pck_len_rd_ptr = ref_pck_len_rd_ptr + 1;
+                ref_packet_length = ref_pck_len_buffer[ref_pck_len_rd_ptr[4:0]];
+                ref_pck_len_rd_ptr = ref_pck_len_rd_ptr + 1;
             `uvm_info("PKT_LEN_READ_DEBUG", $sformatf("Time=%0t: Packet length read: deq_req_r=%0b, pck_len=%0d, ptr=%0d", 
                      $time, ref_deq_req_r, ref_packet_length, ref_pck_len_rd_ptr-1), UVM_LOW)
         end
@@ -778,7 +785,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                           (({~ref_pck_len_wr_ptr[5], ref_pck_len_wr_ptr[4:0]} == ref_pck_len_rd_ptr) ? 1 : 0);
         ref_pck_len_empty = (ref_pck_len_wr_ptr == ref_pck_len_rd_ptr) ? 1 : 0;
     endfunction
-
+    
     function void update_write_level_next();
         // CRITICAL FIX: Check for reset first - if reset is active, don't calculate wr_lvl_next
         // This prevents the scoreboard from calculating new values during reset
@@ -831,7 +838,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end else begin
             ref_pck_proc_overflow = 0;
         end
-        
+
         // Underflow detection - use previous cycle's buffer_empty state
         if (tr.deq_req && ref_buffer_empty_prev) begin
             ref_pck_proc_underflow = 1;
@@ -984,4 +991,4 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         `uvm_info("SCOREBOARD_NEW", $sformatf("New Scoreboard Report: Total=%0d, Errors=%0d", total_transactions, errors), UVM_LOW)
     endfunction
 
-endclass
+endclass 
