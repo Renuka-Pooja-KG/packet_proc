@@ -294,6 +294,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                      $time, ref_enq_req_r, tr.enq_req, ref_wr_en), UVM_LOW)
         end
         
+        // Additional debug: Show the exact timing relationship
+        `uvm_info("TIMING_DEBUG", $sformatf("Time=%0t: Timing - enq_req_curr=%0b, enq_req_r=%0b, enq_req_r1=%0b, wr_en=%0b, write_state=%0d", 
+                 $time, tr.enq_req, ref_enq_req_r, ref_enq_req_r1, ref_wr_en, write_state), UVM_LOW)
+        
         // Update write level based on current enables AFTER buffer operations (matching RTL order)
         update_write_level_next();
         
@@ -637,19 +641,19 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_wr_en = 0;  // No write when packet is invalid
             `uvm_info("WR_EN_DEBUG", $sformatf("Time=%0t: Packet drop detected - setting wr_en=0 to prevent invalid packet write", $time), UVM_LOW)
         end else begin
-            // CRITICAL FIX: Use ref_enq_req_r1 (1-cycle delayed) to match RTL exactly
-            // RTL uses enq_req_r1 (1-cycle delayed enq_req) for wr_en generation
+            // CRITICAL FIX: Use ref_enq_req_r (1-cycle delayed) to match RTL exactly
+            // RTL uses enq_req_r (1-cycle delayed enq_req) for wr_en generation
             case (write_state)
                 IDLE_W: begin
                     ref_wr_en = 0;
                 end
                 WRITE_HEADER: begin
                     // RTL: wr_en = (enq_req_r) ? 1 : 0
-                    ref_wr_en = (ref_enq_req_r1) ? 1 : 0;
+                    ref_wr_en = (ref_enq_req_r) ? 1 : 0;
                 end
                 WRITE_DATA: begin
                     // RTL: wr_en = (enq_req_r) ? 1 : 0
-                    ref_wr_en = (ref_enq_req_r1) ? 1 : 0;
+                    ref_wr_en = (ref_enq_req_r) ? 1 : 0;
                 end
                 default: begin
                     ref_wr_en = 0;
