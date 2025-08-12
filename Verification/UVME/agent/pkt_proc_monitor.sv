@@ -26,17 +26,16 @@ class pkt_proc_monitor extends uvm_monitor;
       // This ensures we capture all combinational signals immediately when they change
       @(posedge vif.pck_proc_int_mem_fsm_clk or vif.packet_drop);
       
-      // Determine what triggered the sampling for better debugging
-      if ($rose(vif.packet_drop)) begin
-        `uvm_info("COMBINATIONAL_TRIGGER", $sformatf("Time=%0t: packet_drop=1 (combinational)", $time), UVM_LOW)
-      end else if ($fell(vif.packet_drop)) begin
-        `uvm_info("COMBINATIONAL_TRIGGER", $sformatf("Time=%0t: packet_drop=0 (combinational)", $time), UVM_LOW)
+       // Simple trigger detection
+      if (vif.packet_drop !== tr.packet_drop) begin
+        `uvm_info("PACKET_DROP_CHANGE", $sformatf("Time=%0t: packet_drop changed to %0b", $time, vif.packet_drop), UVM_LOW)
       end else begin
         `uvm_info("CLOCK_TRIGGER", $sformatf("Time=%0t: Sampling triggered by posedge clock", $time), UVM_LOW)
       end
+
+      sample_all_signals();
+      analysis_port.write(tr);
       
-        sample_all_signals();
-        analysis_port.write(tr);
     end
   endtask
 
