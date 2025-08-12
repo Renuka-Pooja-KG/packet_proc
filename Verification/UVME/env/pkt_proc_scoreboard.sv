@@ -198,8 +198,16 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Update reference model
         update_reference_model(tr);
         
-        // Compare outputs
+        // Compare outputs (using current cycle's ref_wr_lvl value)
         compare_outputs(tr);
+        
+        // CRITICAL FIX: Update ref_wr_lvl AFTER comparison for next cycle use
+        // This ensures comparison uses current cycle value, but wr_lvl is ready for next cycle
+        if (ref_wr_lvl_next != ref_wr_lvl) begin
+            `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: Updating wr_lvl after comparison: %0d -> %0d (for next cycle)", 
+                     $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
+            ref_wr_lvl = ref_wr_lvl_next;
+        end
     endfunction
 
     function void update_reference_model(pkt_proc_seq_item tr);
@@ -338,9 +346,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         write_state = write_state_next;
         read_state  = read_state_next;
         
-        // CRITICAL: Update pipeline registers at the END of the cycle (matching RTL clock edge behavior)
-        // This ensures that all calculations use the PREVIOUS cycle's values
-        `uvm_info("PIPELINE_TIMING", $sformatf("Time=%0t: Updating pipeline registers at END of cycle (for next cycle use)", $time), UVM_LOW)
+        // CRITICAL: Update pipeline registers AFTER state advancement (matching RTL clock edge behavior)
+        // This ensures that states are updated using current cycle's pipeline values
+        // and pipeline registers are updated for next cycle use
+        `uvm_info("PIPELINE_TIMING", $sformatf("Time=%0t: Updating pipeline registers after state advancement (for next cycle use)", $time), UVM_LOW)
         update_pipeline_registers(tr);
         
         // CRITICAL FIX: Update count_w_prev at end of cycle for next cycle's invalid checks
@@ -352,14 +361,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             `uvm_info("COUNT_W_TRACKING", $sformatf("Time=%0t: count_w changed: prev=%0d -> curr=%0d (for next cycle packet drop)", 
                      $time, ref_count_w_prev, ref_count_w), UVM_LOW)
         end
-
-        // CRITICAL FIX: Update wr_lvl at end of cycle (matching RTL always_ff behavior)
-        // RTL updates wr_lvl at posedge clk, so scoreboard should update at end of cycle
-        if (ref_wr_lvl_next != ref_wr_lvl) begin
-            `uvm_info("WR_LVL_UPDATE", $sformatf("Time=%0t: Updating wr_lvl at end of cycle: %0d -> %0d (matching RTL always_ff)", 
-                     $time, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
-            ref_wr_lvl = ref_wr_lvl_next;
-        end
+        
+        // CRITICAL FIX: ref_wr_lvl is NOT updated here - it's updated in write() after comparison
+        // This ensures comparison uses current cycle value, but wr_lvl is ready for next cycle
         
         // CRITICAL FIX: Reset read pointer when wr_lvl is reset to 0 (buffer empty)
         // This ensures read pointer stays synchronized with write level
