@@ -37,8 +37,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit [14:0] ref_wr_lvl;
     bit [11:0] ref_count_w;          // Write counter
     bit [11:0] ref_count_r;          // Read counter
-    bit [11:0] ref_packet_length;      // read-path packet length (used by read FSM)
-    bit [11:0] ref_packet_length_w;    // write-path packet length (used for pck_invalid)
+    // Packet length tracking
+    bit [11:0] ref_packet_length;      // Current packet length (from read path)
+    bit [11:0] ref_packet_length_w;    // Write path packet length (for pck_invalid checks)
+    bit [11:0] ref_count_w_prev;       // Previous cycle's count_w for packet drop calculations
     bit ref_buffer_full, ref_buffer_empty;
     bit ref_pck_len_full, ref_pck_len_empty;
     bit ref_pck_proc_overflow, ref_pck_proc_underflow;
@@ -117,6 +119,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_len_rd_ptr = 0;
         ref_wr_lvl = 0;
         ref_count_w = 0;
+        ref_count_w_prev = 0;  // Initialize previous count_w
         ref_count_r = 0;
         ref_packet_length = 0;
         ref_packet_length_w = 0;
@@ -360,7 +363,13 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // CRITICAL FIX: Update count_w_prev at end of cycle for next cycle's invalid checks
         // This ensures invalid conditions use the previous cycle's count_w value (matching RTL timing)
-        // ref_count_w_prev = ref_count_w; // REMOVED
+        ref_count_w_prev = ref_count_w;
+        
+        // Debug count_w tracking for packet drop
+        if (ref_count_w != ref_count_w_prev) begin
+            `uvm_info("COUNT_W_TRACKING", $sformatf("Time=%0t: count_w changed: prev=%0d -> curr=%0d (for next cycle packet drop)", 
+                     $time, ref_count_w_prev, ref_count_w), UVM_LOW)
+        end
     endfunction
 
     function void handle_reset_logic(pkt_proc_seq_item tr);
@@ -382,6 +391,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_len_rd_ptr = 0;
             ref_wr_lvl = 0;
             ref_count_w = 0;
+            ref_count_w_prev = 0;  // Initialize previous count_w
             ref_count_r = 0;
             ref_packet_length = 0;
             ref_packet_length_w = 0;
@@ -450,6 +460,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_len_rd_ptr = 0;
             ref_wr_lvl = 0;
             ref_count_w = 0;
+            ref_count_w_prev = 0;  // Initialize previous count_w
             ref_count_r = 0;
             ref_packet_length = 0;
             ref_packet_length_w = 0;
@@ -888,21 +899,26 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             // Write level logic (matching RTL always_ff exactly):
             // RTL calculates based on CURRENT cycle enables and CURRENT buffer states
             if (ref_packet_drop) begin
-                ref_wr_lvl_next = ref_wr_lvl - ref_count_w;
+                // CRITICAL FIX: Use previous cycle's count_w for packet drop decrement
+                // This matches RTL behavior where packet drop uses the count from previous cycle
+                ref_wr_lvl_next = ref_wr_lvl - ref_count_w_prev;
+                
+                `uvm_info("WR_LVL_DROP_DEBUG", $sformatf("Time=%0t: Packet drop wr_lvl calc: current=%0d, prev_count_w=%0d, next=%0d", 
+                         $time, ref_wr_lvl, ref_count_w_prev, ref_wr_lvl_next), UVM_LOW)
             end else if ((ref_wr_en && !ref_buffer_full) && (ref_rd_en && !ref_buffer_empty) && (!ref_overflow)) begin
                 ref_wr_lvl_next = ref_wr_lvl;  // No change
             end else if (ref_wr_en && !ref_buffer_full) begin
                 ref_wr_lvl_next = ref_wr_lvl + 1;
             end else if (ref_rd_en && !ref_buffer_empty) begin
-                ref_wr_lvl = ref_wr_lvl - 1;
-                ref_wr_lvl_next = ref_wr_lvl;
+                // CRITICAL FIX: Don't modify ref_wr_lvl directly - only calculate next value
+                ref_wr_lvl_next = ref_wr_lvl - 1;
             end else begin
                 ref_wr_lvl_next = ref_wr_lvl;  // No change
             end
             
             // Debug wr_lvl calculation details
-            `uvm_info("WR_LVL_DEBUG", $sformatf("wr_lvl_next calc: wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, overflow=%0b, current_wr_lvl=%0d, next_wr_lvl=%0d", 
-                     ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_overflow, ref_wr_lvl, ref_wr_lvl_next), UVM_LOW)
+            `uvm_info("WR_LVL_DEBUG", $sformatf("wr_lvl_next calc: wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, overflow=%0b, current_wr_lvl=%0d, next_wr_lvl=%0d, packet_drop=%0b, prev_count_w=%0d", 
+                     ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_overflow, ref_wr_lvl, ref_wr_lvl_next, ref_packet_drop, ref_count_w_prev), UVM_LOW)
         end else begin
             // Reset is active: keep wr_lvl_next at 0 (matching DUT behavior)
             ref_wr_lvl_next = 0;
