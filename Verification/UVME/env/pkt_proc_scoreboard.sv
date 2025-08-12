@@ -286,9 +286,15 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Update write level based on current enables AFTER buffer operations (matching RTL order)
         update_write_level_next();
         
-        // Debug wr_lvl calculation (but don't update ref_wr_lvl yet - it updates on next cycle like RTL)
-        `uvm_info("WR_LVL_DEBUG", $sformatf("wr_lvl_next calc: wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, wr_lvl_next=%0d, current_wr_lvl=%0d", 
-                 ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_wr_lvl_next, ref_wr_lvl), UVM_LOW)
+        // Enhanced debug wr_lvl calculation with more details
+        `uvm_info("WR_LVL_DEBUG", $sformatf("Time=%0t: wr_lvl_next calc: wr_en=%0b, rd_en=%0b, buffer_full=%0b, buffer_empty=%0b, wr_lvl_next=%0d, current_wr_lvl=%0d, packet_drop=%0b, count_w=%0d", 
+                 $time, ref_wr_en, ref_rd_en, ref_buffer_full, ref_buffer_empty, ref_wr_lvl_next, ref_wr_lvl, ref_packet_drop, ref_count_w), UVM_LOW)
+        
+        // Additional debug: Track when write level should change
+        if (ref_wr_lvl_next != ref_wr_lvl) begin
+            `uvm_info("WR_LVL_CHANGE", $sformatf("Time=%0t: WR_LVL CHANGE DETECTED: %0d -> %0d (wr_en=%0b, rd_en=%0b, packet_drop=%0b)", 
+                     $time, ref_wr_lvl, ref_wr_lvl_next, ref_wr_en, ref_rd_en, ref_packet_drop), UVM_LOW)
+        end
         
         // Update previous-cycle trackers BEFORE buffer operations (matching RTL timing)
         ref_rd_en_prev = ref_rd_en;
