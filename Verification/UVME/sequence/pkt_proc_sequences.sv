@@ -124,6 +124,27 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     end
   endtask
 
+    // Helper task to send idle transactions with enq_req high
+  task send_idle_transaction_enq(int cycles);
+    repeat(cycles) begin
+          tr = pkt_proc_seq_item::type_id::create("tr_idle");
+    start_item(tr);
+    tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+    tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
+    tr.empty_de_assert = 1'b0;  // Always disabled
+      tr.enq_req = 1'b1;
+      tr.deq_req = 1'b0;
+      tr.in_sop = 1'b0;
+      tr.in_eop = 1'b0;
+      tr.wr_data_i = 32'h0;
+      tr.pck_len_valid = 1'b0;
+      tr.pck_len_i = 12'h0;
+      tr.pck_proc_almost_full_value = almost_full_value;
+      tr.pck_proc_almost_empty_value = almost_empty_value;
+      finish_item(tr);
+    end
+  endtask
+
   // Helper task to write a complete packet
   // This version ensures in_eop is set only on the last word (i == pkt_length-1)
   // and handles the single-word packet case correctly.
@@ -850,7 +871,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Phase 4: Wait for packet drop processing
     `uvm_info(get_type_name(), "Phase 4: Waiting for packet drop processing", UVM_LOW)
-    send_idle_transaction(5);
+    send_idle_transaction_enq(5);
 
     write_packet(5, 32'hC004);
     
@@ -858,6 +879,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   endtask
 
   // Test invalid_5: ((count_w == (packet_length_w - 1)) || (packet_length_w == 0)) && (~in_eop) && (write_state == WRITE_DATA)
+  //  assign invalid_5 =  ((count_w == pck_len_r2-1'b1 || (pck_len_r2 == {PCK_LEN{1'b0}})) && (~in_eop_r1) && (present_state_w==WRITE_DATA))  ;
+
   task invalid_5_scenario();
     initialize_dut();
     
