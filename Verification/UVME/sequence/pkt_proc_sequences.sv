@@ -888,6 +888,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   task invalid_5_scenario();
     initialize_dut();
     
+    write_packet(5, 32'h100);
     `uvm_info(get_type_name(), "Starting invalid_5 scenario - count_w == (packet_length_w - 1) && (~in_eop) && (write_state == WRITE_DATA)", UVM_LOW)
     
     // Phase 1: Write packet header to get into WRITE_DATA state
@@ -957,6 +958,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     send_idle_transaction_enq(3);
 
     write_packet(5, 32'hD004);
+    send_idle_transaction(2);
+    read_data(20);
     
     `uvm_info(get_type_name(), "Invalid_5 scenario completed - Packet drop expected", UVM_LOW)
   endtask
