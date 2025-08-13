@@ -83,6 +83,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     // Overflow should go high AFTER one clock pulse after pck_proc_full goes high
     bit ref_buffer_full_prev2;  // Two cycles ago buffer_full (for overflow timing)
     
+    // CRITICAL FIX: Add read pointer next value for proper timing alignment
+    bit [13:0] ref_rd_ptr_next;  // Next cycle's read pointer (for 1-cycle delay matching DUT)
+    
     // Write level tracking (matching RTL's always_ff behavior)
     bit [14:0] ref_wr_lvl_next;     // Next cycle's wr_lvl value (15 bits: [ADDR_WIDTH:0])
     bit ref_overflow;               // Internal overflow signal (matching int_buffer_top)
@@ -114,6 +117,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // Initialize pointers and counters
         ref_rd_ptr = 0;
+        ref_rd_ptr_next = 0;  // Initialize next cycle's read pointer
         ref_pck_len_wr_ptr = 0;
         ref_pck_len_rd_ptr = 0;
         ref_wr_lvl = 0;
@@ -368,12 +372,16 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // RTL uses deq_req_r (current pipeline register value) to generate rd_en, so scoreboard must do the same
         // This prevents the 1-cycle timing mismatch where rd_data_o is read even when deq_req=0
         if (ref_deq_req_r && !ref_buffer_empty && (read_state == READ_HEADER || read_state == READ_DATA)) begin
-            // Read data from buffer using read pointer
+            // CRITICAL FIX: Simplified pointer-based timing - read immediately, advance pointer with delay
+            // Read data directly from buffer using current pointer (immediate)
             ref_rd_data_o = ref_buffer[ref_rd_ptr[13:0]];
-            // Advance read pointer (this represents the next read position)
-            ref_rd_ptr = ref_rd_ptr + 1;
-            `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: Read operation: deq_req_r=%0b, state=%0d, rd_data=0x%0h, ptr=%0d", 
-                     $time, ref_deq_req_r, read_state, ref_rd_data_o, ref_rd_ptr-1), UVM_LOW)
+            // Calculate next read pointer position (will be updated on next cycle)
+            ref_rd_ptr_next = ref_rd_ptr + 1;
+            `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: Read operation: deq_req_r=%0b, state=%0d, rd_data=0x%0h, current_ptr=%0d, next_ptr=%0d (pointer advances next cycle)", 
+                     $time, ref_deq_req_r, read_state, ref_rd_data_o, ref_rd_ptr, ref_rd_ptr_next), UVM_LOW)
+        end else begin
+            // No read operation this cycle - keep pointer unchanged
+            ref_rd_ptr_next = ref_rd_ptr;
         end
             
         // Packet length read aligns with deq_req_r in READ_HEADER (matching RTL exactly)
@@ -445,6 +453,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         `uvm_info("PIPELINE_TIMING", $sformatf("Time=%0t: Updating pipeline registers for next cycle use (matching RTL <= behavior)", $time), UVM_LOW)
         update_pipeline_registers(tr);
         
+        // CRITICAL FIX: Update read pointer with 1-cycle delay to match RTL timing
+        // RTL registers read pointer, so it updates one cycle after deq_req_r goes high
+        ref_rd_ptr = ref_rd_ptr_next;
+        `uvm_info("RD_PTR_TIMING", $sformatf("Time=%0t: Updated rd_ptr=%0d from rd_ptr_next (1-cycle delay matching RTL)", 
+                 $time, ref_rd_ptr), UVM_LOW)
+        
         // ============================================================================
         // PHASE 16: Final updates for next cycle
         // ============================================================================
@@ -512,6 +526,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             
             // Reset pointers and counters
             ref_rd_ptr = 0;
+            ref_rd_ptr_next = 0;  // Reset next cycle's read pointer
             ref_pck_len_wr_ptr = 0;
             ref_pck_len_rd_ptr = 0;
             ref_wr_lvl = 0;
@@ -586,6 +601,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             
             // Reset pointers and counters
             ref_rd_ptr = 0;
+            ref_rd_ptr_next = 0;  // Reset next cycle's read pointer
             ref_pck_len_wr_ptr = 0;
             ref_pck_len_rd_ptr = 0;
             ref_wr_lvl = 0;
@@ -638,6 +654,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_wr_en = 0;
             ref_rd_en = 0;
             ref_wr_lvl_next = 0;
+            ref_rd_ptr_next = 0;  // Reset next cycle's read pointer
             
             return; // Exit early - no further processing during reset
         end
@@ -979,25 +996,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: Packet drop detected - skipping buffer write operations to prevent incorrect count_w/wr_ptr increments", $time), UVM_LOW)
         end
         
-        // CRITICAL FIX: Read operations should update based on REGISTERED deq_req_r (matching RTL exactly)
-        // RTL uses deq_req_r (1-cycle delayed) to generate rd_en, so scoreboard must do the same
-        // This prevents the 1-cycle timing mismatch where rd_data_o is read even when deq_req=0
-        if (ref_deq_req_r && !ref_buffer_empty && (read_state == READ_HEADER || read_state == READ_DATA)) begin
-            // Read data from buffer using read pointer
-            ref_rd_data_o = ref_buffer[ref_rd_ptr[13:0]];
-            // Advance read pointer (this represents the next read position)
-            ref_rd_ptr = ref_rd_ptr + 1;
-            `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: Read operation: deq_req_r=%0b, state=%0d, rd_data=0x%0h, ptr=%0d", 
-                     $time, ref_deq_req_r, read_state, ref_rd_data_o, ref_rd_ptr-1), UVM_LOW)
-        end
-            
-        // Packet length read aligns with deq_req_r in READ_HEADER (matching RTL exactly)
-        if (read_state == READ_HEADER && ref_deq_req_r) begin
-            ref_packet_length = ref_pck_len_buffer[ref_pck_len_rd_ptr[4:0]];
-            ref_pck_len_rd_ptr = ref_pck_len_rd_ptr + 1;
-            `uvm_info("PKT_LEN_READ_DEBUG", $sformatf("Time=%0t: Packet length read: deq_req_r=%0b, pck_len=%0d, ptr=%0d", 
-                     $time, ref_deq_req_r, ref_packet_length, ref_pck_len_rd_ptr-1), UVM_LOW)
-        end
+
         
         // CRITICAL FIX: Reset count_w when packet completes normally (matching RTL exactly)
         // RTL resets count_w when: (in_eop_r1 && present_state_w == WRITE_DATA) || packet_drop
