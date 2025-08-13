@@ -301,6 +301,32 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // This ensures ref_wr_en uses the CURRENT state that matches the DUT
         generate_write_read_enables(tr);
         
+        // CRITICAL FIX: Buffer write operations happen HERE after ref_wr_en is calculated
+        // This ensures the first write at wr_lvl=0 uses the correct wr_en value
+        if (!ref_packet_drop) begin
+            // Write operations - only when packet is valid
+            if (ref_wr_en && !ref_buffer_full) begin
+                // CRITICAL DEBUG: Track buffer writes when wr_lvl = 0
+                if (ref_wr_lvl == 0) begin
+                    `uvm_info("BUFFER_WRITE_DEBUG", $sformatf("Time=%0t: WRITING TO BUFFER[0]: wr_en=%0b, buffer_full=%0b, state=%0d, data=0x%0h", 
+                             $time, ref_wr_en, ref_buffer_full, write_state, ref_wr_data_r1), UVM_LOW)
+                end
+                
+                if (write_state == WRITE_HEADER) begin
+                    ref_buffer[ref_wr_lvl[13:0]] = ref_wr_data_r1;  // Use registered value
+                end else if (write_state == WRITE_DATA) begin
+                    ref_buffer[ref_wr_lvl[13:0]] = ref_wr_data_r1;  // Use registered value
+                end
+                
+                // CRITICAL FIX: Increment count_w_next for successful write operations
+                ref_count_w_next = ref_count_w + 1;
+                `uvm_info("COUNT_W_DEBUG", $sformatf("Time=%0t: count_w_next set to %0d (state=%0d, wr_en=%0b, wr_lvl=%0d, buffer[%0d]=0x%0h)", 
+                         $time, ref_count_w_next, write_state, ref_wr_en, ref_wr_lvl, ref_wr_lvl[13:0], ref_wr_data_r1), UVM_LOW)
+                
+                
+            end
+        end
+        
         // Debug state alignment for write enable generation
         `uvm_info("STATE_ALIGNMENT", $sformatf("Time=%0t: State alignment - Scoreboard write_state=%0d, DUT present_state=%0d, ref_wr_en=%0b, enq_req_r=%0b, enq_req_curr=%0b", 
                  $time, write_state, tr.pck_proc_int_mem_fsm_rstn ? 0 : 2, ref_wr_en, ref_enq_req_r, tr.enq_req), UVM_LOW)
@@ -814,34 +840,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_buffer_operations(pkt_proc_seq_item tr);
-        // Write/read enables are already calculated in generate_write_read_enables()
-        // No need to recalculate them here
+        // CRITICAL FIX: Buffer write operations moved to main function after generate_write_read_enables()
+        // This ensures the first write at wr_lvl=0 uses the correct wr_en value
         
         // CRITICAL FIX: Check packet drop BEFORE performing any buffer operations
         // If packet drop is detected, skip all write operations to prevent incorrect count_w/wr_ptr increments
         if (!ref_packet_drop) begin
-            // Write operations - only when packet is valid
-            if (ref_wr_en && !ref_buffer_full) begin
-                // CRITICAL DEBUG: Track buffer writes when wr_lvl = 0
-                if (ref_wr_lvl == 0) begin
-                    `uvm_info("BUFFER_WRITE_DEBUG", $sformatf("Time=%0t: WRITING TO BUFFER[0]: wr_en=%0b, buffer_full=%0b, state=%0d, data=0x%0h", 
-                             $time, ref_wr_en, ref_buffer_full, write_state, ref_wr_data_r1), UVM_LOW)
-                end
-                
-                if (write_state == WRITE_HEADER) begin
-                    ref_buffer[ref_wr_lvl[13:0]] = ref_wr_data_r1;  // Use registered value
-                end else if (write_state == WRITE_DATA) begin
-                    ref_buffer[ref_wr_lvl[13:0]] = ref_wr_data_r1;  // Use registered value
-                end
-                
-                // CRITICAL FIX: Increment count_w_next for successful write operations
-                ref_count_w_next = ref_count_w + 1;
-                `uvm_info("COUNT_W_DEBUG", $sformatf("Time=%0t: count_w_next set to %0d (state=%0d, wr_en=%0b, wr_lvl=%0d, buffer[%0d]=0x%0h)", 
-                         $time, ref_count_w_next, write_state, ref_wr_en, ref_wr_lvl, ref_wr_lvl[13:0], ref_wr_data_r1), UVM_LOW)
-                
-              
-            end
-            
             // Packet length buffer operations (matching RTL exactly)
             // RTL writes to pck_len_buffer in WRITE_HEADER state regardless of wr_en
             if (write_state == WRITE_HEADER) begin
