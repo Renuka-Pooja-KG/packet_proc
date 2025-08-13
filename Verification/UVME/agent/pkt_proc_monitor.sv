@@ -53,9 +53,9 @@ class pkt_proc_monitor extends uvm_monitor;
     tr.deq_req = vif.deq_req;           // Raw signal, not clocking block
     
     // Capture output signals - These come from RTL, so keep using monitor_cb
-    tr.out_sop = vif.out_sop;
+    tr.out_sop = vif.monitor_cb.out_sop;
     tr.rd_data_o = vif.monitor_cb.rd_data_o;
-    tr.out_eop = vif.out_eop;
+    tr.out_eop = vif.monitor_cb.out_eop;
     
     // Capture ALL combinational status signals from raw interface (immediate capture)
     tr.pck_proc_full = vif.pck_proc_full;           // ← COMBINATIONAL
@@ -65,7 +65,7 @@ class pkt_proc_monitor extends uvm_monitor;
     tr.pck_proc_overflow = vif.monitor_cb.pck_proc_overflow;
     tr.pck_proc_underflow = vif.monitor_cb.pck_proc_underflow;
     tr.packet_drop = vif.monitor_cb.packet_drop;           
-    tr.pck_proc_wr_lvl = vif.pck_proc_wr_lvl;      // ← COMBINATIONAL
+    tr.pck_proc_wr_lvl = vif.monitor_cb.pck_proc_wr_lvl;      // ← COMBINATIONAL
     
     // Enhanced debug: Show ALL combinational outputs with detailed information
     `uvm_info("COMBINATIONAL_DEBUG", $sformatf("Time=%0t: Combinational outputs - full=%0b, empty=%0b, almost_full=%0b, almost_empty=%0b", 
