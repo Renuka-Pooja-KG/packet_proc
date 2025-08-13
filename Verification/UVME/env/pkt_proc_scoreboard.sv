@@ -822,19 +822,24 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         if (!ref_packet_drop) begin
             // Write operations - only when packet is valid
             if (ref_wr_en && !ref_buffer_full) begin
+                // CRITICAL DEBUG: Track buffer writes when wr_lvl = 0
+                if (ref_wr_lvl == 0) begin
+                    `uvm_info("BUFFER_WRITE_DEBUG", $sformatf("Time=%0t: WRITING TO BUFFER[0]: wr_en=%0b, buffer_full=%0b, state=%0d, data=0x%0h", 
+                             $time, ref_wr_en, ref_buffer_full, write_state, ref_wr_data_r1), UVM_LOW)
+                end
+                
                 if (write_state == WRITE_HEADER) begin
                     ref_buffer[ref_wr_lvl[13:0]] = ref_wr_data_r1;  // Use registered value
                 end else if (write_state == WRITE_DATA) begin
                     ref_buffer[ref_wr_lvl[13:0]] = ref_wr_data_r1;  // Use registered value
                 end
                 
-                // CRITICAL FIX: Buffer write operations (only if not packet drop)
-                if (ref_wr_en && !ref_buffer_full && !ref_packet_drop) begin
-                  // CRITICAL FIX: Only increment count_w_next if not packet drop
-                    ref_count_w_next = ref_count_w + 1;
-                    `uvm_info("COUNT_W_DEBUG", $sformatf("Time=%0t: count_w_next set to %0d (state=%0d, wr_en=%0b, wr_lvl=%0d, buffer[%0d]=0x%0h)", 
-                             $time, ref_count_w_next, write_state, ref_wr_en, ref_wr_lvl, ref_wr_lvl[13:0], ref_wr_data_r1), UVM_LOW)
-                end
+                // CRITICAL FIX: Increment count_w_next for successful write operations
+                ref_count_w_next = ref_count_w + 1;
+                `uvm_info("COUNT_W_DEBUG", $sformatf("Time=%0t: count_w_next set to %0d (state=%0d, wr_en=%0b, wr_lvl=%0d, buffer[%0d]=0x%0h)", 
+                         $time, ref_count_w_next, write_state, ref_wr_en, ref_wr_lvl, ref_wr_lvl[13:0], ref_wr_data_r1), UVM_LOW)
+                
+              
             end
             
             // Packet length buffer operations (matching RTL exactly)
@@ -913,6 +918,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // DUT logic: pck_proc_empty = 1 when wr_lvl > 0 (buffer has data)
         // This matches the actual RTL behavior
         ref_buffer_empty = (ref_wr_lvl > 0) ? 0 : 1;
+        
+        // CRITICAL DEBUG: Track buffer state changes, especially when wr_lvl = 0
+        if (ref_wr_lvl == 0) begin
+            `uvm_info("BUFFER_STATE_DEBUG", $sformatf("Time=%0t: BUFFER STATE at wr_lvl=0: full=%0b, empty=%0b, wr_en=%0b, rd_en=%0b", 
+                     $time, ref_buffer_full, ref_buffer_empty, ref_wr_en, ref_rd_en), UVM_LOW)
+        end
         
         // Debug buffer state
         `uvm_info("BUFFER_DEBUG", $sformatf("Buffer State: rd_ptr=%0d, pck_len_wr_ptr=%0d, pck_len_rd_ptr=%0d, empty=%0b, full=%0b, empty_de_assert=%0b, in_eop_r2=%0b", 
