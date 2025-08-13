@@ -22,21 +22,8 @@ class pkt_proc_monitor extends uvm_monitor;
     `uvm_info(get_type_name(), "Pkt_proc Monitor run phase started", UVM_LOW)
     
     forever begin
-      // Wait for EITHER clock edge OR packet_drop change
-      @(posedge vif.pck_proc_int_mem_fsm_clk or vif.packet_drop);
-      
-      // Determine transaction type based on what triggered the sampling
-      if (vif.packet_drop !== tr.packet_drop) begin
-        // packet_drop detected: send special transaction for detection only
-        `uvm_info("PACKET_DROP_CHANGE", $sformatf("Time=%0t: packet_drop changed to %0b", $time, vif.packet_drop), UVM_LOW)
-        tr.packet_drop_detected = 1;  // Flag for packet_drop detection
-        tr.clock_edge = 0;            // Not a clock edge transaction
-      end else begin
-        // Clock edge: normal sampling and wr_lvl updates
-        `uvm_info("CLOCK_TRIGGER", $sformatf("Time=%0t: Sampling triggered by posedge clock", $time), UVM_LOW)
-        tr.packet_drop_detected = 0;  // Not a packet_drop detection
-        tr.clock_edge = 1;            // Flag for clock edge transaction
-      end
+      // Wait for clock edge
+      @(posedge vif.pck_proc_int_mem_fsm_clk);
 
       sample_all_signals();
       analysis_port.write(tr);
@@ -77,12 +64,12 @@ class pkt_proc_monitor extends uvm_monitor;
     tr.pck_proc_almost_empty = vif.pck_proc_almost_empty;   // ← COMBINATIONAL
     tr.pck_proc_overflow = vif.monitor_cb.pck_proc_overflow;
     tr.pck_proc_underflow = vif.monitor_cb.pck_proc_underflow;
-    tr.packet_drop = vif.packet_drop;               // ← COMBINATIONAL
+    tr.packet_drop = vif.monitor_cb.packet_drop;           
     tr.pck_proc_wr_lvl = vif.pck_proc_wr_lvl;      // ← COMBINATIONAL
     
     // Enhanced debug: Show ALL combinational outputs with detailed information
-    `uvm_info("COMBINATIONAL_DEBUG", $sformatf("Time=%0t: Combinational outputs - full=%0b, empty=%0b, almost_full=%0b, almost_empty=%0b, packet_drop=%0b, wr_lvl=%0d", 
-             $time, tr.pck_proc_full, tr.pck_proc_empty, tr.pck_proc_almost_full, tr.pck_proc_almost_empty, tr.packet_drop, tr.pck_proc_wr_lvl), UVM_LOW)
+    `uvm_info("COMBINATIONAL_DEBUG", $sformatf("Time=%0t: Combinational outputs - full=%0b, empty=%0b, almost_full=%0b, almost_empty=%0b", 
+             $time, tr.pck_proc_full, tr.pck_proc_empty, tr.pck_proc_almost_full, tr.pck_proc_almost_empty), UVM_LOW)
     
     // Additional debug: Show captured values for verification
     `uvm_info("MONITOR_DEBUG", $sformatf("Captured at %0t: pck_proc_empty=%0b, pck_proc_almost_empty=%0b, pck_proc_wr_lvl=%0d, packet_drop=%0b", 

@@ -67,13 +67,13 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
   //Monitoring the outputs from the DUT at positive edge of the clock as the RTL is written in posedge
   clocking monitor_cb @(posedge pck_proc_int_mem_fsm_clk);
     //Monitoring the outputs from the DUT
-    default input #0 output #1;
+    default input #2 output #1;
     input out_sop;
     input rd_data_o;
     input out_eop;
     input pck_proc_overflow;
     input pck_proc_underflow;
-   // input packet_drop;
+    input packet_drop;
     input pck_proc_wr_lvl;
 
     //Monitoring the inputs to the DUT 
@@ -97,7 +97,6 @@ interface pkt_proc_interface (input logic pck_proc_int_mem_fsm_clk);
   //Modport to the monitor
   modport monitor_mp (clocking monitor_cb, input pck_proc_int_mem_fsm_rstn, 
                      input pck_proc_full, input pck_proc_empty, 
-                     input pck_proc_almost_full, input pck_proc_almost_empty,
-                     input packet_drop);
+                     input pck_proc_almost_full, input pck_proc_almost_empty);
 
 endinterface
