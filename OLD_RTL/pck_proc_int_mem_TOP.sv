@@ -74,6 +74,7 @@ module pck_proc_int_mem_fsm
                    localparam   IDLE_W        =  2'd0   ;
                    localparam   WRITE_HEADER  =  2'd1   ;
                    localparam   WRITE_DATA    =  2'd2   ;
+                   localparam   ERROR         =  2'd3   ;
 
                    //       READ FSM STATES
                    localparam   IDLE_R        =  2'd0   ;
@@ -115,7 +116,7 @@ module pck_proc_int_mem_fsm
                    logic    [PCK_LEN-1:0]    pck_len_reg        ;
 
                    logic    [PCK_LEN-1:0]    count_w            ;
-                   logic    [PCK_LEN-1:0]    count_w2            ;
+                   logic    [PCK_LEN-1:0]    count_w1           ;
 
                    logic    [PCK_LEN-1:0]    pck_len_r1         ;
                    logic    [PCK_LEN-1:0]    pck_len_r2         ;
@@ -150,8 +151,6 @@ module pck_proc_int_mem_fsm
                    
                    logic                     valid_1   ;
                    logic                     valid_2   ;
-
-                   logic                     in_packet ;
                                       //       REGISTERING THE INPUTS
                    always_ff@(posedge pck_proc_int_mem_fsm_clk or negedge pck_proc_int_mem_fsm_rstn)
                    begin
@@ -178,6 +177,7 @@ module pck_proc_int_mem_fsm
                        enq_req_r    <=     1'b0                 ;
                        enq_req_r1   <=     1'b0                 ;
 
+                       count_w1     <=     {PCK_LEN{1'b0}}      ;
 
                        pck_len_w1   <=     {PCK_LEN{1'b0}}      ;
                        deq_req_r    <=     1'b0                 ;
@@ -205,6 +205,7 @@ module pck_proc_int_mem_fsm
                        enq_req_r    <=     1'b0                 ;
                        enq_req_r1   <=     1'b0                 ;
 
+                       count_w1     <=     {PCK_LEN{1'b0}}      ;
 
                        pck_len_w1   <=     {PCK_LEN{1'b0}}      ;
                        deq_req_r    <=     1'b0                 ;
@@ -232,6 +233,7 @@ module pck_proc_int_mem_fsm
                        enq_req_r    <=     enq_req               ;
                        enq_req_r1   <=     enq_req_r             ;
 
+                       count_w1     <=     count_w               ;
 
                        pck_len_w1   <=     pck_len_i             ;
                        deq_req_r    <=     deq_req               ;
@@ -265,33 +267,6 @@ module pck_proc_int_mem_fsm
                    end
 
                    
-                   always_ff@(posedge pck_proc_int_mem_fsm_clk or negedge pck_proc_int_mem_fsm_rstn)
-                   begin
-                   if(!pck_proc_int_mem_fsm_rstn)
-                       begin
-                       in_packet <= 1'b0            ;
-                       end
-                   else 
-                       begin
-                       if(packet_drop && !in_sop_r1)
-                           begin
-                           in_packet <= 1'b0        ;
-                           end
-                       else if(in_sop_r1 && !in_eop_r1)
-                           begin
-                           in_packet <= 1'b1        ;
-                           end
-                       else if(in_eop_r1)    
-                           begin
-                           in_packet <= 1'b0        ;
-                           end
-                       else
-                           begin
-                           in_packet <= in_packet   ;
-                           end
-                       end
-
-                   end
                    //       LOGIC FOR COUNTING THE DATA WHILE WRITING TO BUFFER
 
                    assign valid_1 = (~in_sop      )         ;
@@ -299,19 +274,15 @@ module pck_proc_int_mem_fsm
 
                    //assign pck_valid 
                    assign pck_valid   = (((present_state_w==WRITE_HEADER) || (present_state_w==WRITE_DATA)) && enq_req_r && (~pck_proc_overflow ))            ;
-                   assign pck_invalid = (((in_sop_r1 && in_eop_r1) ||// (in_sop_r && in_sop_r1)|| 
-                                        (in_sop_r1 && in_packet) || ((count_w < pck_len_r2 - 12'd1) && (pck_len_r2 != {PCK_LEN{1'b0}}) && (in_eop_r1)) || ((count_w == pck_len_r2-1'b1 && (pck_len_r2 != {PCK_LEN{1'b0}})) && (~in_eop_r1) && (present_state_w==WRITE_DATA)) || (pck_proc_overflow)) && enq_req)        ;
+                   assign pck_invalid = (((in_sop && in_eop) ||// (in_sop_r && in_sop_r1)|| 
+                                        (in_sop && (~in_eop_r1) && (present_state_w==WRITE_DATA)) || ((count_w < pck_len_r2 - 12'd1) && (pck_len_r2 != {PCK_LEN{1'b0}}) && (in_eop_r1)) || ((count_w == pck_len_r2-1'b1 || (pck_len_r2 == {PCK_LEN{1'b0}})) && (~in_eop_r1) && (present_state_w==WRITE_DATA)) || (pck_proc_overflow)) && enq_req)        ;
 
-                   //   SOP AND EOP AT A SAME TIME
-                   assign invalid_1 =  (in_sop_r1 && in_eop_r1)      ;
-                   //  assign invalid_2 =  (in_sop_r && in_sop_r1) ;
-                   //   BACK TO BACK SOP WITHOUT GETTING EOP 
-                   assign invalid_3 =  (in_sop_r1 && in_packet) ;
-                   //   PACKET LENGTH IS GREATER THAN ACTUAL PAYLOAD 
+
+                   assign invalid_1 =  (in_sop && in_eop)      ;
+                   assign invalid_2 =  (in_sop_r && in_sop_r1) ;
+                   assign invalid_3 =  (in_sop && (~in_eop_r1) && (present_state_w==WRITE_DATA)) ;
                    assign invalid_4 =  ((count_w < pck_len_r2 - 12'd1) && (pck_len_r2 != {PCK_LEN{1'b0}}) && (in_eop_r1))     ;
-                   //   PACKET LENGTH IS LESSER THAN ACTUAL PAYLOAD 
-                   assign invalid_5 =  ((count_w == pck_len_r2-1'b1 && (pck_len_r2 != {PCK_LEN{1'b0}})) && (~in_eop_r1) && (present_state_w==WRITE_DATA))  ;
-                   //   PACKET OVERFLOW
+                   assign invalid_5 =  ((count_w == pck_len_r2-1'b1 || (pck_len_r2 == {PCK_LEN{1'b0}})) && (~in_eop_r1) && (present_state_w==WRITE_DATA))  ;
                    assign invalid_6 =  (pck_proc_overflow)    ;
         
                    always_ff@(posedge pck_proc_int_mem_fsm_clk or negedge pck_proc_int_mem_fsm_rstn)
@@ -340,39 +311,9 @@ module pck_proc_int_mem_fsm
 
                    end
 
-                   always_ff@(posedge pck_proc_int_mem_fsm_clk or negedge pck_proc_int_mem_fsm_rstn)
-                   begin
-
-                   if(!pck_proc_int_mem_fsm_rstn)
-                       begin
-                       count_w2   <=   {PCK_LEN{1'b0}}          ;                       
-                       end
-                   else if(pck_proc_int_mem_fsm_sw_rstn)
-                       begin
-                       count_w2   <=   {PCK_LEN{1'b0}}          ;                                              
-                       end                   
-                   else if(in_sop_r1 && !in_eop_r1 && packet_drop)    
-                       begin
-                       count_w2   <= {{(PCK_LEN-1){1'b0}}, 1'b1} ;
-                       end
-                   else if((in_eop_r1 && (present_state_w == WRITE_DATA)) || packet_drop)
-                       begin
-                       count_w2   <=  {PCK_LEN{1'b0}}           ;
-                       end
-                   else if(pck_valid)
-                       begin
-                       count_w2   <=  count_w2 + 1'b1           ;
-                       end
-                   else
-                       begin
-                       count_w2   <=  count_w2                   ;
-                       end
-
-                   end
-
                    //----------------- WRITING FSM LOGIC --------------------------------------
 
-                   assign   next_data_ready    = ((in_sop && in_eop_r1 && enq_req) || (in_sop && enq_req))       ;
+                   assign   next_data_ready    = (in_sop && enq_req)        ;
                    assign   next_data_nt_ready = (in_eop_r1 && (!in_sop) && (!enq_req))     ;
 
                    //       PRESENT STATE LOGIC
@@ -415,13 +356,13 @@ module pck_proc_int_mem_fsm
                    WRITE_HEADER :
                                  begin
 
-                                 if(in_sop_r1 && in_eop_r1)
-                                     begin
-                                     next_state_w = IDLE_W                    ;
-                                     end
-                                 else if(in_sop)
+                                 if(in_sop)
                                      begin
                                      next_state_w = WRITE_HEADER              ;
+                                     end
+                                 else if(pck_invalid)    
+                                     begin
+                                     next_state_w = ERROR                     ;
                                      end
                                  else 
                                      begin
@@ -439,11 +380,7 @@ module pck_proc_int_mem_fsm
                                      begin
                                      next_state_w = IDLE_W                    ;
                                      end
-                                 else if(packet_drop)   
-                                     begin
-                                     next_state_w = IDLE_W                    ;
-                                     end
-                                 else    
+                                 else   
                                      begin
                                      next_state_w = WRITE_DATA                ;
                                      end
@@ -481,8 +418,6 @@ module pck_proc_int_mem_fsm
                                  if(pck_invalid)
                                      begin
                                      packet_drop = 1'b1                ;
-                                     wr_en    = 1'b1                   ;
-                                     wr_data  = (in_sop_r1) ? wr_data_r1 : {DATA_WIDTH{1'b0}}   ;
                                      end
                                  else if(enq_req_r)
                                      begin
@@ -506,8 +441,6 @@ module pck_proc_int_mem_fsm
                                   if(pck_invalid)
                                      begin
                                      packet_drop = 1'b1                ;
-                                     wr_en       = 1'b1                ;
-                                     wr_data     = wr_data_r1          ;
                                      end
                                  else if(enq_req_r)
                                      begin
@@ -521,6 +454,12 @@ module pck_proc_int_mem_fsm
                                      end
 
                                  end
+
+                   ERROR        :
+                                 begin
+                                 packet_drop  = 1'b1                                        ;
+                                 end
+
                    default      : 
                                  begin
                                  wr_en       = 1'b0                                         ;
@@ -554,6 +493,7 @@ module pck_proc_int_mem_fsm
                          .wr_data               ( wr_data                      )     ,
 
                          .in_eop                ( in_eop_r2                    )     ,
+                         .count                 ( count_w1                     )     ,
 
                          .rd_en                 ( rd_en                        )     ,
                          .rd_data_out           ( rd_data_out_w                )     ,
@@ -573,11 +513,7 @@ module pck_proc_int_mem_fsm
                          .underflow             (                              )     ,
 
                          .pck_drop              ( packet_drop                  )     ,
-                         .count_w               ( count_w2                     )     ,
-                         .invalid_1             ( invalid_1                    )     ,
-                         .invalid_3             ( invalid_3                    )     ,
-                         .invalid_4             ( invalid_4                    )     ,
-                         .invalid_5             ( invalid_5                    )
+                         .count_w               ( count_w                      )     
                        );  
                    //--------------------------------------------------------------------------
 
@@ -609,8 +545,7 @@ module pck_proc_int_mem_fsm
                          .overflow              (                              )     ,
                          .underflow             (                              )     ,
 
-                         .pck_drop              ( packet_drop                  )     ,
-                         .invalid_1             ( invalid_1                    )
+                         .pck_drop              ( packet_drop                  )     
                        );  
                    //--------------------------------------------------------------------------
 

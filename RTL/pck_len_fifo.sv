@@ -31,7 +31,8 @@ module pck_len_fifo
             output logic                          overflow             ,    //////  to indicate overflow and overflow condidtion
             output logic                          underflow            ,
 
-            input  logic                          pck_drop             
+            input  logic                          pck_drop             ,
+            input  logic                          invalid_1         
             );
 
 
@@ -39,6 +40,7 @@ module pck_len_fifo
 logic [ADDR_WIDTH:0]    wr_ptr           ;
 logic [ADDR_WIDTH:0]    rd_ptr           ;
 
+logic [ADDR_WIDTH:0]    wr_addr_w        ;
 ////// to the use for almost empty and almost full 
 logic temp_empty                        ;
 logic temp_full                         ;
@@ -58,7 +60,7 @@ pck_len_buffer_inst
                .int_buffer_sw_rstn  ( sw_rst        )   ,
                                                  
                .wr_en_i             ( wr_en         )   ,
-               .wr_addr             ( wr_ptr        )   ,
+               .wr_addr             ( wr_addr_w     )   ,
                .wr_data             ( wr_data       )   ,
                                                  
                .rd_en_i             ( rd_en         )   ,
@@ -110,6 +112,11 @@ begin
          wr_ptr       <= {(ADDR_WIDTH+1){1'b0}}                  ;
     end
     
+    else if(pck_drop && wr_en)
+        begin
+        wr_ptr        <= wr_ptr                       ;
+        end
+
     else if(pck_drop)
         begin
         wr_ptr        <= wr_ptr - 1'b1                       ;
@@ -121,6 +128,8 @@ begin
     end
 
 end 
+
+assign wr_addr_w = (pck_drop && !invalid_1 && wr_en) ? (wr_ptr - 1'b1) : wr_ptr   ;
 
 ////// assigning buffer full 
 assign buffer_full  = (({~wr_ptr[5],wr_ptr[ADDR_WIDTH-1:0]} == rd_ptr))                   ;

@@ -1,9 +1,8 @@
 `timescale 1ns/1ps
-module int_buffer_top
-              #(parameter DATA_WIDTH        = 32     , 
-                          DEPTH             = 16384  , 
-                          ADDR_WIDTH        = 14     ,
-                          PCK_LEN           = 12     
+module pck_len_fifo
+              #(parameter DATA_WIDTH   = 12     , 
+                          DEPTH        = 32     , 
+                          ADDR_WIDTH   = 5      
                )
             (
              
@@ -12,13 +11,9 @@ module int_buffer_top
             input  logic                          hw_rst               ,  //////  reset           
             input  logic                          sw_rst               ,  //////  sotware reset
 
-            input  logic                          empty_de_assert      ,
-
             input  logic                          wr_en                ,   //////  to write the data 
             input  logic       [DATA_WIDTH-1:0]   wr_data              ,
-
-            input  logic                          in_eop               ,
-
+      
             input  logic                          rd_en                ,   //////  to read the data 
             output logic       [DATA_WIDTH-1:0]   rd_data_out          ,
 
@@ -36,13 +31,7 @@ module int_buffer_top
             output logic                          overflow             ,    //////  to indicate overflow and overflow condidtion
             output logic                          underflow            ,
 
-            input  logic                          pck_drop             ,
-            input  logic       [PCK_LEN-1:0]      count_w              ,
-            input  logic                          invalid_1            ,
-            input  logic                          invalid_3            ,
-            input  logic                          invalid_4            ,        
-            input  logic                          invalid_5         
-
+            input  logic                          pck_drop             
             );
 
 
@@ -50,29 +39,26 @@ module int_buffer_top
 logic [ADDR_WIDTH:0]    wr_ptr           ;
 logic [ADDR_WIDTH:0]    rd_ptr           ;
 
-logic [ADDR_WIDTH:0]    wr_addr_w           ;
 ////// to the use for almost empty and almost full 
 logic temp_empty                        ;
 logic temp_full                         ;
 
-logic buffer_empty_r                    ;
-
 
 /////              INTERNAL BUFFER INSTANTIATION             /////
-int_buffer 
-             #( 
-               .DATA_WIDTH  ( DATA_WIDTH  ) ,
-               .DEPTH       ( DEPTH       ) ,
-               .ADDR_WIDTH  ( ADDR_WIDTH  )
-              )
-int_buffer_inst
+pck_len_buffer
+             #(
+               .DATA_WIDTH  ( DATA_WIDTH )    ,  
+               .DEPTH       ( DEPTH      )    , 
+               .ADDR_WIDTH  ( ADDR_WIDTH )        
+              )                        
+pck_len_buffer_inst           
               (
                .int_buffer_clk      ( clk           )   ,
                .int_buffer_rstn     ( hw_rst        )   ,
                .int_buffer_sw_rstn  ( sw_rst        )   ,
                                                  
                .wr_en_i             ( wr_en         )   ,
-               .wr_addr             ( wr_addr_w     )   ,
+               .wr_addr             ( wr_ptr        )   ,
                .wr_data             ( wr_data       )   ,
                                                  
                .rd_en_i             ( rd_en         )   ,
@@ -97,7 +83,7 @@ assign temp_full = (wr_lvl >= DEPTH - almost_full_value)        ;
 ////// assigning almost full 
 always_comb
 begin
-         if(temp_full)
+        if(temp_full)
         begin
             almost_full = 1'b1                             ;
         end
@@ -124,35 +110,20 @@ begin
          wr_ptr       <= {(ADDR_WIDTH+1){1'b0}}                  ;
     end
     
-    else if(pck_drop && overflow)
+    else if(pck_drop)
         begin
-        wr_ptr        <= wr_ptr - count_w + 1'b1                 ;
-        end
-    else if(pck_drop && invalid_1)
-        begin
-        wr_ptr <= wr_ptr - count_w                               ;
-        end
-    else if(pck_drop && (invalid_4 || invalid_5))                                  //LOGIC 
-        begin
-        wr_ptr       <= wr_ptr - count_w                         ;
-        end
-    else if(pck_drop && !invalid_1)
-        begin
-        wr_ptr        <= (wr_ptr + 1'b1) - count_w                 ;
+        wr_ptr        <= wr_ptr - 1'b1                       ;
         end
 
     else if(wr_en && ~buffer_full)
     begin
-       //  buffer[wr_ptr[ADDR_WIDTH-1:0]] <= wr_data             ;
-         wr_ptr       <= wr_ptr + 1'b1                           ; 
-    end  
+         wr_ptr       <= wr_ptr + 1'b1                       ; 
+    end
 
 end 
 
-assign wr_addr_w = pck_drop ? (wr_ptr - count_w) : wr_ptr    ;
-
 ////// assigning buffer full 
-assign buffer_full  = (({~wr_ptr[14],wr_ptr[ADDR_WIDTH-1:0]} == rd_ptr))                   ;
+assign buffer_full  = (({~wr_ptr[5],wr_ptr[ADDR_WIDTH-1:0]} == rd_ptr))                   ;
 
 ////// assigning the overflow
  always_ff@(posedge clk or negedge hw_rst)
@@ -188,7 +159,17 @@ assign temp_empty = (wr_lvl <= almost_empty_value)                       ;
 always_comb
 begin
 
-        if(temp_empty)
+        if(!hw_rst)
+        begin
+            almost_empty = 1'b1                            ;     
+        end
+
+        else if(sw_rst)
+        begin
+             almost_empty = 1'b1                           ; 
+        end
+
+        else if(temp_empty)
         begin
             almost_empty = 1'b1                             ;
         end
@@ -222,26 +203,9 @@ begin
 end
 
 
-//////  calculating buffer empty condition 
+//////  calculating buffer empty condition     
 
-assign buffer_empty =  ((empty_de_assert ==0) && (wr_ptr != rd_ptr)) ? 1'b0 :((in_eop && (wr_ptr != rd_ptr) && (empty_de_assert == 1))) ? 1'b0 : ((wr_ptr == rd_ptr) ? 1'b1 : buffer_empty_r)  ; 
-
-always_ff@(posedge clk or negedge hw_rst)
-begin
-
-if(!hw_rst)
-    begin
-        buffer_empty_r <= 1'b1  ;
-    end
-else if(sw_rst)
-    begin
-        buffer_empty_r <= 1'b1  ;
-    end
-else 
-    begin
-        buffer_empty_r <= buffer_empty  ;
-    end
-end
+assign buffer_empty = (wr_ptr == rd_ptr)                    ;
 
 //////  assigning the underflow 
 always_ff@(posedge clk or negedge hw_rst)
@@ -281,14 +245,6 @@ begin
         wr_lvl  <= {(ADDR_WIDTH+1){1'b0}}                                      ;
     end    
 
-    else if(pck_drop && invalid_3)
-        begin
-        wr_lvl <= wr_lvl - count_w + 1'b1                                      ;
-        end
-    else if(pck_drop)
-    begin
-        wr_lvl <= wr_lvl - count_w                                             ;
-    end
     else if( (wr_en && ~buffer_full) && (rd_en && ~buffer_empty) && (~overflow))
     begin
         wr_lvl  <= wr_lvl                                                 ;
