@@ -720,6 +720,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     send_idle_transaction_enq(3);
 
     write_packet(5, 32'hD002);
+    read_data(15);
     
     `uvm_info(get_type_name(), "Invalid_1 scenario completed - Packet drop expected", UVM_LOW)
   endtask
@@ -730,6 +731,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     `uvm_info(get_type_name(), "Starting invalid_3 scenario - in_sop && (~in_eop_r1) && (write_state == WRITE_DATA)", UVM_LOW)
     
+    write_packet(5, 32'hD002);
+
     // Phase 1: Write packet header to get into WRITE_DATA state
     `uvm_info(get_type_name(), "Phase 1: Writing packet header to enter WRITE_DATA state", UVM_LOW)
     tr = pkt_proc_seq_item::type_id::create("tr_invalid_3_header");
@@ -801,6 +804,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     // Phase 4: Wait for packet drop processing
     `uvm_info(get_type_name(), "Phase 4: Waiting for packet drop processing", UVM_LOW)
     send_idle_transaction(5);
+    read_data(20);
     
     `uvm_info(get_type_name(), "Invalid_3 scenario completed - Packet drop expected", UVM_LOW)
   endtask
@@ -808,6 +812,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   // Test invalid_4: (count_w < (packet_length_w - 1)) && (packet_length_w != 0) && (in_eop)
   task invalid_4_scenario();
     initialize_dut();
+    write_packet(5, 32'hD002);
     
     `uvm_info(get_type_name(), "Starting invalid_4 scenario - count_w < (packet_length_w - 1) && in_eop", UVM_LOW)
     
@@ -878,6 +883,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     send_idle_transaction_enq(5);
 
     write_packet(5, 32'hC004);
+    read_data(15);
     
     `uvm_info(get_type_name(), "Invalid_4 scenario completed - Packet drop expected", UVM_LOW)
   endtask
