@@ -507,6 +507,19 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_count_w_prev = ref_count_w;
         ref_count_w2_prev = ref_count_w2;  // CRITICAL FIX: Add count_w2_prev update for new RTL
         
+        // CRITICAL FIX: Update count_r to match RTL's always_ff behavior
+        // RTL increments count_r on every deq_req_r in READ_HEADER or READ_DATA states
+        if (ref_deq_req_r && (read_state_prev == READ_HEADER || read_state_prev == READ_DATA)) begin
+            ref_count_r = ref_count_r + 1;
+            `uvm_info("COUNT_R_UPDATE", $sformatf("Time=%0t: count_r incremented to %0d (deq_req_r=%0b, prev_state=%0d)", 
+                     $time, ref_count_r, ref_deq_req_r, read_state_prev), UVM_LOW)
+        end else if (ref_out_eop) begin
+            // Reset count_r when out_eop is asserted (matching RTL)
+            ref_count_r = 0;
+            `uvm_info("COUNT_R_UPDATE", $sformatf("Time=%0t: count_r reset to 0 (out_eop=%0b)", 
+                     $time, ref_out_eop), UVM_LOW)
+        end
+        
         // Debug count_w tracking for packet drop
         if (ref_count_w != ref_count_w_prev) begin
             `uvm_info("COUNT_W_TRACKING", $sformatf("Time=%0t: count_w changed: prev=%0d -> curr=%0d (for next cycle packet drop)", 
@@ -1216,24 +1229,26 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 if (ref_deq_req_r) begin  // ← Use registered version (matching RTL)
                     ref_out_sop = 1;
                     ref_out_eop = 0;
-                    // Start/advance packet counter on deq_req_r (matching RTL exactly)
-                    ref_count_r = ref_count_r + 1;
-                    `uvm_info("COUNT_DEBUG", $sformatf("Time=%0t: READ_HEADER count_r incremented to %0d (deq_req_r=%0b)", 
-                             $time, ref_count_r, ref_deq_req_r), UVM_LOW)
+                    // CRITICAL FIX: Don't increment count_r here - RTL does it in always_ff (next cycle)
+                    // The output generation should use the current count_r value, not the incremented one
+                    `uvm_info("COUNT_DEBUG", $sformatf("Time=%0t: READ_HEADER: out_sop=1, count_r=%0d (will increment to %0d next cycle)", 
+                             $time, ref_count_r, ref_count_r + 1), UVM_LOW)
                 end
             end
             READ_DATA: begin
                 if (ref_deq_req_r) begin  // ← Use registered version (matching RTL)
-                    // Increment count on each dequeued data beat; assert eop on last beat
-                    ref_count_r = ref_count_r + 1;
-                    if (ref_count_r == (ref_packet_length)) begin
+                    // CRITICAL FIX: Check if this is the last beat BEFORE incrementing count_r
+                    // This ensures out_eop is generated on the correct beat
+                    if (ref_count_r == (ref_packet_length - 1)) begin
                         ref_out_eop = 1;
                         ref_count_r = 0; // packet boundary
-                        `uvm_info("COUNT_DEBUG", $sformatf("Time=%0t: READ_DATA count_r reset to 0 (packet complete, length=%0d)", 
-                                 $time, ref_packet_length), UVM_LOW)
+                        `uvm_info("COUNT_DEBUG", $sformatf("Time=%0t: READ_DATA count_r reset to 0 (packet complete, length=%0d, was at %0d)", 
+                                 $time, ref_packet_length, ref_count_r), UVM_LOW)
                     end else begin
-                        `uvm_info("COUNT_DEBUG", $sformatf("Time=%0t: READ_DATA count_r incremented to %0d (deq_req_r=%0b)", 
-                                 $time, ref_count_r, ref_deq_req_r), UVM_LOW)
+                        ref_out_eop = 0;
+                        // CRITICAL FIX: count_r increment is now handled in final updates (matching RTL always_ff)
+                        `uvm_info("COUNT_DEBUG", $sformatf("Time=%0t: READ_DATA: out_eop=0, count_r=%0d (will increment to %0d next cycle)", 
+                                 $time, ref_count_r, ref_count_r + 1), UVM_LOW)
                     end
                 end
             end
@@ -1245,6 +1260,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Debug out_sop calculation (now using previous state to match RTL timing)
         `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop/eop: prev_state=%0d, curr_state=%0d, deq_req_r=%0b, count_r=%0d, pck_len=%0d, out_sop=%0b, out_eop=%0b (using prev_state)", 
                  read_state_prev, read_state, ref_deq_req_r, ref_count_r, ref_packet_length, ref_out_sop, ref_out_eop), UVM_LOW)
+        
+        // Debug count_r timing alignment with RTL
+        `uvm_info("COUNT_R_TIMING", $sformatf("Time=%0t: count_r timing: current=%0d, will_update=%0b, out_eop=%0b (RTL always_ff timing)", 
+                 $time, ref_count_r, ref_deq_req_r && (read_state_prev == READ_HEADER || read_state_prev == READ_DATA), ref_out_eop), UVM_LOW)
     endfunction
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
