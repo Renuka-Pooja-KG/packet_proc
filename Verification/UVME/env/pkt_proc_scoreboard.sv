@@ -26,6 +26,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     write_state_e write_state_next; // next-state mirror for write FSM
     read_state_e read_state;
     read_state_e read_state_next; // mirror RTL present/next state split
+    read_state_e read_state_prev; // previous state for output generation timing
     
     // Reference model internal state
     bit [31:0] ref_buffer[0:16383];  // Main buffer
@@ -117,6 +118,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         write_state_next = IDLE_W;
         read_state = IDLE_R;
         read_state_next = IDLE_R;
+        read_state_prev = IDLE_R;  // Initialize previous state
         
         // Initialize pointers and counters
         ref_rd_ptr = 0;
@@ -478,6 +480,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM ADVANCE: %0d -> %0d", 
                      $time, read_state, read_state_next), UVM_LOW)
         end
+        read_state_prev = read_state;  // Store previous state before advancing
         write_state = write_state_next;
         read_state  = read_state_next;
         
@@ -1202,8 +1205,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_out_eop = 0;
         
         // CRITICAL FIX: Scoreboard mirrors RTL exactly using present_state and deq_req_r
-        // RTL uses deq_req_r (1-cycle delayed) for count_r updates, so scoreboard must do the same
-        unique case (read_state)
+        // RTL uses present_state_r (current state after always_ff update) for output generation
+        // Scoreboard must use the state that was active BEFORE the current cycle's state advance
+        unique case (read_state_prev)  // ← Use previous state (matching RTL present_state_r timing)
             IDLE_R: begin
                 ref_out_sop = 0;
                 ref_out_eop = 0;
@@ -1238,9 +1242,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Combinational output signals (matching RTL exactly)
         update_combinational_outputs(tr);
         
-        // Debug out_sop calculation (now using updated ref_deq_req_r after pipeline update)
-        `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop/eop: state=%0d, deq_req_r=%0b, count_r=%0d, pck_len=%0d, out_sop=%0b, out_eop=%0b (AFTER pipeline update)", 
-                 read_state, ref_deq_req_r, ref_count_r, ref_packet_length, ref_out_sop, ref_out_eop), UVM_LOW)
+        // Debug out_sop calculation (now using previous state to match RTL timing)
+        `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop/eop: prev_state=%0d, curr_state=%0d, deq_req_r=%0b, count_r=%0d, pck_len=%0d, out_sop=%0b, out_eop=%0b (using prev_state)", 
+                 read_state_prev, read_state, ref_deq_req_r, ref_count_r, ref_packet_length, ref_out_sop, ref_out_eop), UVM_LOW)
     endfunction
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
