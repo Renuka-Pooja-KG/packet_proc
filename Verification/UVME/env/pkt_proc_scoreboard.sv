@@ -454,12 +454,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         update_overflow_underflow(tr);             // Sets ref_pck_proc_overflow, ref_pck_proc_underflow
         
         // ============================================================================
-        // PHASE 11: Update outputs (uses current states and data)
-        // ============================================================================
-        update_outputs(tr);                        // Sets ref_out_sop, ref_out_eop, ref_count_r
-        
-        // ============================================================================
-        // PHASE 12: Update packet drop logic and outputs (moved here as requested)
+        // PHASE 11: Update packet drop logic and outputs (moved here as requested)
         // ============================================================================
         update_packet_drop_logic(tr);              // Sets ref_packet_drop (moved to after buffer operations)
         
@@ -473,7 +468,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                  $time, write_state, write_state_next, read_state, read_state_next, ref_packet_drop), UVM_LOW)
         
         // ============================================================================
-        // PHASE 13: Advance states (simultaneous update matching RTL <=)
+        // PHASE 12: Advance states (simultaneous update matching RTL <=)
         // ============================================================================
         if (write_state != write_state_next) begin
             `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM ADVANCE: %0d -> %0d", 
@@ -487,7 +482,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         read_state  = read_state_next;
         
         // ============================================================================
-        // PHASE 14: Update pipeline registers (simultaneous update matching RTL <=)
+        // PHASE 13: Update pipeline registers (simultaneous update matching RTL <=)
         // ============================================================================
         `uvm_info("PIPELINE_TIMING", $sformatf("Time=%0t: Updating pipeline registers for next cycle use (matching RTL <= behavior)", $time), UVM_LOW)
         update_pipeline_registers(tr);
@@ -497,6 +492,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_rd_ptr = ref_rd_ptr_next;
         `uvm_info("RD_PTR_TIMING", $sformatf("Time=%0t: Updated rd_ptr=%0d from rd_ptr_next (1-cycle delay matching RTL)", 
                  $time, ref_rd_ptr), UVM_LOW)
+        
+        // ============================================================================
+        // PHASE 14: Update outputs (AFTER pipeline registers are updated)
+        // ============================================================================
+        update_outputs(tr);                        // Sets ref_out_sop, ref_out_eop, ref_count_r (now uses updated ref_deq_req_r)
         
         // ============================================================================
         // PHASE 15: Final updates for next cycle
@@ -1238,8 +1238,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Combinational output signals (matching RTL exactly)
         update_combinational_outputs(tr);
         
-        // Debug out_sop calculation
-        `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop/eop: state=%0d, deq_req_r=%0b, count_r=%0d, pck_len=%0d, out_sop=%0b, out_eop=%0b", 
+        // Debug out_sop calculation (now using updated ref_deq_req_r after pipeline update)
+        `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop/eop: state=%0d, deq_req_r=%0b, count_r=%0d, pck_len=%0d, out_sop=%0b, out_eop=%0b (AFTER pipeline update)", 
                  read_state, ref_deq_req_r, ref_count_r, ref_packet_length, ref_out_sop, ref_out_eop), UVM_LOW)
     endfunction
 
