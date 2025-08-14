@@ -263,36 +263,26 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         handle_reset_logic(tr);                    // Sets ref_reset_active
         
         // ============================================================================
-        // PHASE 2: FSM next state computation (uses current states)
+        // PHASE 2: Update buffer states FIRST (before packet drop logic)
         // ============================================================================
-        compute_write_next_state(tr);              // Sets write_state_next
-        compute_read_next_state(tr);               // Sets read_state_next
-        
-        // Debug next states computed
-        `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: Next states computed - WRITE: %0d -> %0d, READ: %0d -> %0d", 
-                 $time, write_state, write_state_next, read_state, read_state_next), UVM_LOW)
+        update_buffer_states();                    // Sets ref_buffer_full, ref_buffer_empty
         
         // Debug current cycle inputs for state transitions
         `uvm_info("STATE_INPUTS", $sformatf("Time=%0t: Current inputs - in_sop=%0b, in_eop=%0b, enq_req=%0b, pck_len_valid=%0b, pck_len_i=%0d", 
                  $time, tr.in_sop, tr.in_eop, tr.enq_req, tr.pck_len_valid, tr.pck_len_i), UVM_LOW)
         
         // ============================================================================
-        // PHASE 3: Update buffer states FIRST (before packet drop logic)
-        // ============================================================================
-        update_buffer_states();                    // Sets ref_buffer_full, ref_buffer_empty
-        
-        // ============================================================================
-        // PHASE 4: Update combinational outputs (uses updated buffer states)
+        // PHASE 3: Update combinational outputs (uses updated buffer states)
         // ============================================================================
         update_combinational_outputs(tr);          // Sets ref_pck_proc_* outputs
         
         // ============================================================================
-        // PHASE 5: Update internal overflow (uses updated buffer states)
+        // PHASE 4: Update internal overflow (uses updated buffer states)
         // ============================================================================
         update_internal_overflow();                // Sets ref_overflow
         
         // ============================================================================
-        // PHASE 6: Packet drop logic FIRST (before enable generation)
+        // PHASE 5: Update packet drop logic FIRST (before enable generation)
         // ============================================================================
         update_packet_drop_logic(tr);              // Sets ref_packet_drop
         
@@ -338,17 +328,17 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // ============================================================================
-        // PHASE 7: Generate enables (uses packet drop and current states)
+        // PHASE 6: Generate enables (uses packet drop and current states)
         // ============================================================================
         generate_write_read_enables(tr);           // Uses ref_packet_drop, sets ref_wr_en, ref_rd_en
         
         // ============================================================================
-        // PHASE 8: Update write level (uses packet drop, buffer states, and enables)
+        // PHASE 7: Update write level (uses packet drop, buffer states, and enables)
         // ============================================================================
         update_write_level_next();                 // Uses ref_packet_drop, ref_buffer_full, ref_buffer_empty
         
         // ============================================================================
-        // PHASE 9: Buffer operations (uses correct enables, write level, and packet drop)
+        // PHASE 8: Buffer operations (uses correct enables, write level, and packet drop)
         // ============================================================================
         if (!ref_packet_drop) begin
             // Write operations - only when packet is valid
@@ -441,7 +431,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // ============================================================================
-        // PHASE 10: Update previous-cycle trackers (for next cycle use)
+        // PHASE 9: Update previous-cycle trackers (for next cycle use)
         // ============================================================================
         ref_rd_en_prev = ref_rd_en;
         ref_wr_en_prev = ref_wr_en;
@@ -459,22 +449,31 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // ============================================================================
-        // PHASE 11: Update overflow/underflow detection (uses previous cycle values)
+        // PHASE 10: Update overflow/underflow detection (uses previous cycle values)
         // ============================================================================
         update_overflow_underflow(tr);             // Sets ref_pck_proc_overflow, ref_pck_proc_underflow
         
         // ============================================================================
-        // PHASE 12: Update outputs (uses current states and data)
+        // PHASE 11: Update outputs (uses current states and data)
         // ============================================================================
         update_outputs(tr);                        // Sets ref_out_sop, ref_out_eop, ref_count_r
         
         // ============================================================================
-        // PHASE 13: Update packet drop logic and outputs (moved here as requested)
+        // PHASE 12: Update packet drop logic and outputs (moved here as requested)
         // ============================================================================
         update_packet_drop_logic(tr);              // Sets ref_packet_drop (moved to after buffer operations)
         
+        // CRITICAL FIX: Recompute FSM next states after packet drop logic is calculated
+        // This ensures FSM can use the correct ref_packet_drop value for state transitions
+        compute_write_next_state(tr);              // Recompute write_state_next with updated ref_packet_drop
+        compute_read_next_state(tr);               // Recompute read_state_next with updated ref_packet_drop
+        
+        // Debug next states computed after packet drop logic
+        `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: Next states recomputed after packet drop - WRITE: %0d -> %0d, READ: %0d -> %0d, packet_drop=%0b", 
+                 $time, write_state, write_state_next, read_state, read_state_next, ref_packet_drop), UVM_LOW)
+        
         // ============================================================================
-        // PHASE 14: Advance states (simultaneous update matching RTL <=)
+        // PHASE 13: Advance states (simultaneous update matching RTL <=)
         // ============================================================================
         if (write_state != write_state_next) begin
             `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM ADVANCE: %0d -> %0d", 
@@ -488,7 +487,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         read_state  = read_state_next;
         
         // ============================================================================
-        // PHASE 15: Update pipeline registers (simultaneous update matching RTL <=)
+        // PHASE 14: Update pipeline registers (simultaneous update matching RTL <=)
         // ============================================================================
         `uvm_info("PIPELINE_TIMING", $sformatf("Time=%0t: Updating pipeline registers for next cycle use (matching RTL <= behavior)", $time), UVM_LOW)
         update_pipeline_registers(tr);
@@ -500,7 +499,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                  $time, ref_rd_ptr), UVM_LOW)
         
         // ============================================================================
-        // PHASE 16: Final updates for next cycle
+        // PHASE 15: Final updates for next cycle
         // ============================================================================
         ref_count_w_prev = ref_count_w;
         ref_count_w2_prev = ref_count_w2;  // CRITICAL FIX: Add count_w2_prev update for new RTL
@@ -518,7 +517,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // ============================================================================
-        // PHASE 17: Buffer synchronization
+        // PHASE 16: Buffer synchronization
         // ============================================================================
         // CRITICAL FIX: Reset read pointer when wr_lvl is reset to 0 (buffer empty)
         // This ensures read pointer stays synchronized with write level
@@ -529,7 +528,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // ============================================================================
-        // PHASE 18: DEBUG - Final state verification
+        // PHASE 17: DEBUG - Final state verification
         // ============================================================================
         // Debug state alignment for write enable generation
         `uvm_info("STATE_ALIGNMENT", $sformatf("Time=%0t: State alignment - Scoreboard write_state=%0d, DUT present_state=%0d, ref_wr_en=%0b, enq_req_r=%0b, enq_req_curr=%0b", 
