@@ -486,29 +486,6 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_count_w_next = 0;
         end
         
-        // CRITICAL FIX: Calculate wr_lvl_next based on enable signals (matching RTL exactly)
-        // This ensures correct wr_lvl behavior for concurrent read/write operations
-        if (ref_wr_en && ref_rd_en) begin
-            // Concurrent read/write: wr_lvl stays constant (both pointers advance)
-            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
-            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: CONCURRENT R/W: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d - 1)", 
-                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
-        end else if (ref_wr_en) begin
-            // Write only: wr_lvl increases by 1 (wr_ptr advances, rd_ptr stays)
-            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
-            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: WRITE ONLY: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
-                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
-        end else if (ref_rd_en) begin
-            // Read only: wr_lvl decreases by 1 (wr_ptr stays, rd_ptr advances)
-            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
-            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: READ ONLY: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
-                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
-        end else begin
-            // No operation: wr_lvl stays constant (both pointers stay)
-            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
-            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: NO OP: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
-                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
-        end
     
         // ============================================================================
         // PHASE 9: Update previous-cycle trackers (for next cycle use)
@@ -542,6 +519,38 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // This ensures FSM can use the correct ref_packet_drop value for state transitions
         compute_write_next_state(tr);              // Recompute write_state_next with updated ref_packet_drop
         compute_read_next_state(tr);               // Recompute read_state_next with updated ref_packet_drop
+        
+
+         // CRITICAL FIX: Calculate wr_lvl_next based on enable signals (matching RTL exactly)
+        // This ensures correct wr_lvl behavior for concurrent read/write operations
+        if (ref_wr_en && ref_rd_en) begin
+            // Concurrent read/write: wr_lvl stays constant (both pointers advance)
+            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
+            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: CONCURRENT R/W: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d - 1)", 
+                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+        end else if (ref_wr_en) begin
+            // Write only: wr_lvl increases by 1 (wr_ptr advances, rd_ptr stays)
+            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
+            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: WRITE ONLY: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
+                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+        end else if (ref_rd_en) begin
+            // Read only: wr_lvl decreases by 1 (wr_ptr stays, rd_ptr advances)
+            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
+            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: READ ONLY: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
+                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+        end else if (tr.deq_req && !ref_buffer_empty && (read_state_next == READ_HEADER || read_state_next == READ_DATA)) begin
+            // PENDING READ: deq_req is asserted and FSM will transition to read state next cycle
+            // wr_lvl should decrease by 1 because read will happen next cycle
+            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
+            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: PENDING READ: wr_lvl_next=%0d (deq_req=1, next_state=%0d, wr_ptr_next=%0d - rd_ptr_next=%0d - 1)", 
+                     $time, ref_wr_lvl_next, read_state_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+        end else begin
+            // No operation: wr_lvl stays constant (both pointers stay)
+            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
+            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: NO OP: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
+                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+        end
+
         
         // Debug next states computed after packet drop logic
         `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: Next states recomputed after packet drop - WRITE: %0d -> %0d, READ: %0d -> %0d, packet_drop=%0b", 
