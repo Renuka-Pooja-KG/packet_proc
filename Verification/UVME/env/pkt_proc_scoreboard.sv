@@ -486,8 +486,29 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_count_w_next = 0;
         end
         
-        ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
-        `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: wr_lvl_next=%0d, wr_ptr_next=%0d, rd_ptr_next=%0d", $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+        // CRITICAL FIX: Calculate wr_lvl_next based on enable signals (matching RTL exactly)
+        // This ensures correct wr_lvl behavior for concurrent read/write operations
+        if (ref_wr_en && ref_rd_en) begin
+            // Concurrent read/write: wr_lvl stays constant (both pointers advance)
+            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
+            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: CONCURRENT R/W: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d - 1)", 
+                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+        end else if (ref_wr_en) begin
+            // Write only: wr_lvl increases by 1 (wr_ptr advances, rd_ptr stays)
+            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
+            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: WRITE ONLY: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
+                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+        end else if (ref_rd_en) begin
+            // Read only: wr_lvl decreases by 1 (wr_ptr stays, rd_ptr advances)
+            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
+            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: READ ONLY: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
+                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+        end else begin
+            // No operation: wr_lvl stays constant (both pointers stay)
+            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
+            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: NO OP: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
+                     $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+        end
     
         // ============================================================================
         // PHASE 9: Update previous-cycle trackers (for next cycle use)
