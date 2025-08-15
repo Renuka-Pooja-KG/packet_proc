@@ -867,11 +867,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 if (ref_buffer_empty) begin
                     read_state_next = IDLE_R;
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_DATA -> IDLE_R (buffer empty)", $time), UVM_LOW)
-                end else if ((ref_count_r == (ref_packet_length - 1)) && ref_deq_req_r) begin
+                end else if ((ref_count_r == (ref_packet_length - 1)) && ref_deq_req_r && !ref_buffer_empty) begin
                     read_state_next = READ_HEADER;  // Next packet
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_DATA -> READ_HEADER (next packet: count_r=%0d, pck_len=%0d, deq_req_r=%0b)", 
                              $time, ref_count_r, ref_packet_length, ref_deq_req_r), UVM_LOW)
-                end else if ((ref_count_r == (ref_packet_length - 1)) && !ref_deq_req_r) begin
+                end else if ((ref_count_r == (ref_packet_length - 1)) && (!ref_deq_req_r || ref_buffer_empty)) begin
                     read_state_next = IDLE_R;  // End of packet
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_DATA -> IDLE_R (end of packet: count_r=%0d, pck_len=%0d, deq_req_r=%0b)", 
                              $time, ref_count_r, ref_packet_length, ref_deq_req_r), UVM_LOW)
