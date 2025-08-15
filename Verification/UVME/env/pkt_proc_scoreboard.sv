@@ -339,6 +339,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ============================================================================
         update_write_level_next();                 // Uses ref_packet_drop, ref_buffer_full, ref_buffer_empty
         
+        // CRITICAL FIX: Update buffer states AFTER buffer operations (matching RTL timing)
+        // This ensures ref_buffer_empty reflects the current state after reads/writes
+        update_combinational_outputs(tr);
+        
         // ============================================================================
         // PHASE 8: Buffer operations (uses correct enables, write level, and packet drop)
         // ============================================================================
@@ -1255,8 +1259,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
         endcase
         
-        // Combinational output signals (matching RTL exactly)
-        update_combinational_outputs(tr);
+        // // Combinational output signals (matching RTL exactly)
+        // update_combinational_outputs(tr);
         
         // Debug out_sop calculation (now using previous state to match RTL timing)
         `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop/eop: prev_state=%0d, curr_state=%0d, deq_req_r=%0b, count_r=%0d, pck_len=%0d, out_sop=%0b, out_eop=%0b (using prev_state)", 
