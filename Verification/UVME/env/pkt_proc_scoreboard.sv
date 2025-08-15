@@ -500,7 +500,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                      $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
         end else if (ref_rd_en) begin
             // Read only: wr_lvl decreases by 1 (wr_ptr stays, rd_ptr advances)
-            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
+            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
             `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: READ ONLY: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
                      $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
         end else begin
