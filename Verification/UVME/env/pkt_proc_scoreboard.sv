@@ -264,6 +264,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ============================================================================
         handle_reset_logic(tr);                    // Sets ref_reset_active
         
+        ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
+        ref_buffer_full_prev  = ref_buffer_full;
+        ref_buffer_empty_prev = ref_buffer_empty;
+        ref_overflow_prev = ref_overflow;
+        
         // ============================================================================
         // PHASE 2: Update buffer states FIRST (before packet drop logic)
         // ============================================================================
@@ -276,7 +281,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ============================================================================
         // PHASE 3: Update combinational outputs (uses updated buffer states)
         // ============================================================================
-        update_combinational_outputs(tr);          // Sets ref_pck_proc_* outputs
+        //update_combinational_outputs(tr);          // Sets ref_pck_proc_* outputs
         
         // ============================================================================
         // PHASE 4: Update internal overflow (uses updated buffer states)
@@ -441,10 +446,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ============================================================================
         ref_rd_en_prev = ref_rd_en;
         ref_wr_en_prev = ref_wr_en;
-        ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
-        ref_buffer_full_prev  = ref_buffer_full;
-        ref_buffer_empty_prev = ref_buffer_empty;
-        ref_overflow_prev = ref_overflow;
+        // ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
+        // ref_buffer_full_prev  = ref_buffer_full;
+        // ref_buffer_empty_prev = ref_buffer_empty;
+        // ref_overflow_prev = ref_overflow;
         ref_deq_req_prev2 = ref_deq_req_prev;
         ref_deq_req_prev = ref_deq_req_r;
         
@@ -1280,15 +1285,15 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
-        // CRITICAL FIX: pck_proc_full should be based on wr_lvl, not pointer comparison
-        // DUT logic: pck_proc_full = 1 when wr_lvl == DEPTH (buffer is full)
-        // This matches the actual RTL behavior, not the complex pointer-based logic
-        ref_buffer_full = (ref_wr_lvl == DEPTH) ? 1 : 0;  // Use parameter instead of hardcoded value
+        // // CRITICAL FIX: pck_proc_full should be based on wr_lvl, not pointer comparison
+        // // DUT logic: pck_proc_full = 1 when wr_lvl == DEPTH (buffer is full)
+        // // This matches the actual RTL behavior, not the complex pointer-based logic
+        // ref_buffer_full = (ref_wr_lvl == DEPTH) ? 1 : 0;  // Use parameter instead of hardcoded value
         
-        // CRITICAL FIX: pck_proc_empty should be based on wr_lvl, not pointer comparison
-        // DUT logic: pck_proc_empty = 1 when wr_lvl > 0 (buffer has data)
-        // This matches the actual RTL behavior, not the complex pointer-based logic
-        ref_buffer_empty = (ref_wr_lvl > 0) ? 0 : 1;
+        // // CRITICAL FIX: pck_proc_empty should be based on wr_lvl, not pointer comparison
+        // // DUT logic: pck_proc_empty = 1 when wr_lvl > 0 (buffer has data)
+        // // This matches the actual RTL behavior, not the complex pointer-based logic
+        // ref_buffer_empty = (ref_wr_lvl > 0) ? 0 : 1;
         
         // CRITICAL FIX: pck_proc_almost_full threshold should be DEPTH - almost_full_value
         // DUT logic: pck_proc_almost_full = 1 when wr_lvl >= (DEPTH - almost_full_value)
