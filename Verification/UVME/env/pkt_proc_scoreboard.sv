@@ -281,7 +281,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ============================================================================
         // PHASE 3: Update combinational outputs (uses updated buffer states)
         // ============================================================================
-        //update_combinational_outputs(tr);          // Sets ref_pck_proc_* outputs
+        update_combinational_outputs(tr);          // Sets ref_pck_proc_* outputs
         
         // ============================================================================
         // PHASE 4: Update internal overflow (uses updated buffer states)
@@ -1271,7 +1271,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         endcase
         
         // // Combinational output signals (matching RTL exactly)
-        // update_combinational_outputs(tr);
+        update_combinational_outputs(tr);
         
         // Debug out_sop calculation (now using previous state to match RTL timing)
         `uvm_info("OUT_SOP_DEBUG", $sformatf("out_sop/eop: prev_state=%0d, curr_state=%0d, deq_req_r=%0b, count_r=%0d, pck_len=%0d, out_sop=%0b, out_eop=%0b (using prev_state)", 
@@ -1291,15 +1291,15 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
-        // // CRITICAL FIX: pck_proc_full should be based on wr_lvl, not pointer comparison
-        // // DUT logic: pck_proc_full = 1 when wr_lvl == DEPTH (buffer is full)
-        // // This matches the actual RTL behavior, not the complex pointer-based logic
-        // ref_buffer_full = (ref_wr_lvl == DEPTH) ? 1 : 0;  // Use parameter instead of hardcoded value
+        // CRITICAL FIX: pck_proc_full should be based on wr_lvl, not pointer comparison
+        // DUT logic: pck_proc_full = 1 when wr_lvl == DEPTH (buffer is full)
+        // This matches the actual RTL behavior, not the complex pointer-based logic
+        ref_buffer_full = (ref_wr_lvl == DEPTH) ? 1 : 0;  // Use parameter instead of hardcoded value
         
-        // // CRITICAL FIX: pck_proc_empty should be based on wr_lvl, not pointer comparison
-        // // DUT logic: pck_proc_empty = 1 when wr_lvl > 0 (buffer has data)
-        // // This matches the actual RTL behavior, not the complex pointer-based logic
-        // ref_buffer_empty = (ref_wr_lvl > 0) ? 0 : 1;
+        // CRITICAL FIX: pck_proc_empty should be based on wr_lvl, not pointer comparison
+        // DUT logic: pck_proc_empty = 1 when wr_lvl > 0 (buffer has data)
+        // This matches the actual RTL behavior, not the complex pointer-based logic
+        ref_buffer_empty = (ref_wr_lvl > 0) ? 0 : 1;
         
         // CRITICAL FIX: pck_proc_almost_full threshold should be DEPTH - almost_full_value
         // DUT logic: pck_proc_almost_full = 1 when wr_lvl >= (DEPTH - almost_full_value)
