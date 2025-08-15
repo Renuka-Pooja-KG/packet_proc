@@ -798,7 +798,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     // });
     // finish_item(tr);
 
-    send_idle_transaction_enq(3);
+    send_idle_transaction(3);
 
     write_packet(5, 32'hB006);
     
