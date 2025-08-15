@@ -721,7 +721,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     send_idle_transaction_enq(3);
 
     write_packet(5, 32'hD002);
-    read_data(15);
+    read_data(10);
     
     `uvm_info(get_type_name(), "Invalid_1 scenario completed - Packet drop expected", UVM_LOW)
   endtask
