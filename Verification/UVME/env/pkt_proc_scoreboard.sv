@@ -581,6 +581,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // CRITICAL FIX: Calculate wr_lvl based on pointers (matching RTL exactly)
         // RTL: wr_lvl = wr_ptr - rd_ptr
         ref_wr_lvl = ref_wr_ptr - ref_rd_ptr;
+
+        update_buffer_states();
         
         // CRITICAL FIX: Reset read pointer when wr_lvl is reset to 0 (buffer empty)
         // This ensures read pointer stays synchronized with write level
