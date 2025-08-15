@@ -272,9 +272,19 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ref_buffer_full_prev  = ref_buffer_full;
         // ref_buffer_empty_prev = ref_buffer_empty;
         // ref_overflow_prev = ref_overflow;
-        ref_wr_ptr = ref_wr_ptr_next;
-        ref_rd_ptr = ref_rd_ptr_next;
-        ref_wr_lvl = ref_wr_ptr - ref_rd_ptr;
+
+        // ============================================================================
+        // PHASE 16: Buffer synchronization
+        // ============================================================================
+        // CRITICAL FIX: Update pointers for next cycle (matching RTL always_ff behavior)
+        ref_wr_ptr = ref_wr_ptr_next;  // Update write pointer
+        ref_rd_ptr = ref_rd_ptr_next;  // Update read pointer
+        
+        // CRITICAL FIX: Calculate wr_lvl based on NEXT cycle's read pointer (matching RTL exactly)
+        // RTL: wr_lvl = wr_ptr - rd_ptr, but rd_ptr updates with 1-cycle delay
+        // So for current cycle: wr_lvl = wr_ptr - rd_ptr_next
+        ref_wr_lvl = ref_wr_ptr - ref_rd_ptr_next;  // Use rd_ptr_next, not rd_ptr
+        
 
         // ============================================================================
         // PHASE 2: Update buffer states FIRST (before packet drop logic)
