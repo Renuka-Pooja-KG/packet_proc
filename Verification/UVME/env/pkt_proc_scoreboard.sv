@@ -279,8 +279,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // CRITICAL FIX: Calculate wr_lvl_next based on NEXT cycle's pointers (matching RTL exactly)
         // RTL: wr_lvl = wr_ptr - rd_ptr, but pointers update with 1-cycle delay
         // So for current cycle: wr_lvl_next = wr_ptr_next - rd_ptr_next
+
         ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
-        
+        `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: wr_lvl_next=%0d, wr_ptr_next=%0d, rd_ptr_next=%0d", $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
         // CRITICAL FIX: Update pointers for next cycle (matching RTL always_ff behavior)
         ref_wr_ptr = ref_wr_ptr_next;  // Update write pointer
         ref_rd_ptr = ref_rd_ptr_next;  // Update read pointer
