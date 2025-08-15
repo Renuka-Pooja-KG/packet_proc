@@ -264,10 +264,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ============================================================================
         handle_reset_logic(tr);                    // Sets ref_reset_active
         
-        ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
-        ref_buffer_full_prev  = ref_buffer_full;
-        ref_buffer_empty_prev = ref_buffer_empty;
-        ref_overflow_prev = ref_overflow;
+        // ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
+        // ref_buffer_full_prev  = ref_buffer_full;
+        // ref_buffer_empty_prev = ref_buffer_empty;
+        // ref_overflow_prev = ref_overflow;
         
         // ============================================================================
         // PHASE 2: Update buffer states FIRST (before packet drop logic)
@@ -338,7 +338,13 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // PHASE 6: Generate enables (uses packet drop and current states)
         // ============================================================================
         generate_write_read_enables(tr);           // Uses ref_packet_drop, sets ref_wr_en, ref_rd_en
+         
+        ref_buffer_full_prev  = ref_buffer_full;
+        ref_buffer_empty_prev = ref_buffer_empty;
+        ref_overflow_prev = ref_overflow;
+        ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
         
+       
         // ============================================================================
         // PHASE 7: Update write level (uses packet drop, buffer states, and enables)
         // ============================================================================
