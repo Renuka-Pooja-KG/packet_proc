@@ -314,7 +314,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     write_and_read_packet(8, 32'hC000);
     
-    read_data(20);
+    read_data(30);
     // Phase 4: Clean up with idle cycles
     `uvm_info(get_type_name(), "Phase 4: Cleanup with idle cycles", UVM_LOW)
     //send_idle_transaction(5);
