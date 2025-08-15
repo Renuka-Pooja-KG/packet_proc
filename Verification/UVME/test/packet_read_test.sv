@@ -36,7 +36,7 @@ class packet_read_test extends uvm_test;
     // Test 2: Clean read operations (no random enq_req)
     `uvm_info(get_type_name(), "Test 2: Clean read operations", UVM_LOW)
     seq.scenario = 3;  // Read-only scenario
-    seq.num_transactions = 10;  // Reduced from 50
+    seq.num_transactions = 21;  // Reduced from 50
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 3: Write more packets for additional read testing
@@ -51,7 +51,7 @@ class packet_read_test extends uvm_test;
     // Test 4: Extended read operations
     `uvm_info(get_type_name(), "Test 4: Extended read operations", UVM_LOW)
     seq.scenario = 3;  // Read-only scenario
-    seq.num_transactions = 15;
+    seq.num_transactions = 16;
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     
