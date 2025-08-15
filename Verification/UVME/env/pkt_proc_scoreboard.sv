@@ -272,7 +272,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ref_buffer_full_prev  = ref_buffer_full;
         // ref_buffer_empty_prev = ref_buffer_empty;
         // ref_overflow_prev = ref_overflow;
-        
+        ref_wr_ptr = ref_wr_ptr_next;
+        ref_rd_ptr = ref_rd_ptr_next;
+        ref_wr_lvl = ref_wr_ptr - ref_rd_ptr;
+
         // ============================================================================
         // PHASE 2: Update buffer states FIRST (before packet drop logic)
         // ============================================================================
@@ -571,18 +574,18 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                      $time, ref_count_w2_prev, ref_count_w2), UVM_LOW)
         end
         
-        // ============================================================================
-        // PHASE 16: Buffer synchronization
-        // ============================================================================
-        // CRITICAL FIX: Update pointers for next cycle (matching RTL always_ff behavior)
-        ref_wr_ptr = ref_wr_ptr_next;  // Update write pointer
-        ref_rd_ptr = ref_rd_ptr_next;  // Update read pointer
+        // // ============================================================================
+        // // PHASE 16: Buffer synchronization
+        // // ============================================================================
+        // // CRITICAL FIX: Update pointers for next cycle (matching RTL always_ff behavior)
+        // ref_wr_ptr = ref_wr_ptr_next;  // Update write pointer
+        // ref_rd_ptr = ref_rd_ptr_next;  // Update read pointer
         
-        // CRITICAL FIX: Calculate wr_lvl based on pointers (matching RTL exactly)
-        // RTL: wr_lvl = wr_ptr - rd_ptr
-        ref_wr_lvl = ref_wr_ptr - ref_rd_ptr;
+        // // CRITICAL FIX: Calculate wr_lvl based on pointers (matching RTL exactly)
+        // // RTL: wr_lvl = wr_ptr - rd_ptr
+        // ref_wr_lvl = ref_wr_ptr - ref_rd_ptr;
 
-        update_buffer_states();
+        // update_buffer_states();
         
         // CRITICAL FIX: Reset read pointer when wr_lvl is reset to 0 (buffer empty)
         // This ensures read pointer stays synchronized with write level
