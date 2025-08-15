@@ -508,16 +508,17 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_count_w2_prev = ref_count_w2;  // CRITICAL FIX: Add count_w2_prev update for new RTL
         
         // CRITICAL FIX: Update count_r to match RTL's always_ff behavior
-        // RTL increments count_r on every deq_req_r in READ_HEADER or READ_DATA states
-        if (ref_deq_req_r && (read_state_prev == READ_HEADER || read_state_prev == READ_DATA)) begin
-            ref_count_r = ref_count_r + 1;
-            `uvm_info("COUNT_R_UPDATE", $sformatf("Time=%0t: count_r incremented to %0d (deq_req_r=%0b, prev_state=%0d)", 
-                     $time, ref_count_r, ref_deq_req_r, read_state_prev), UVM_LOW)
-        end else if (ref_out_eop) begin
-            // Reset count_r when out_eop is asserted (matching RTL)
+        // RTL priority: out_eop reset FIRST, then increment (matching RTL exactly)
+        if (ref_out_eop) begin
+            // FIRST PRIORITY: Reset count_r when out_eop is asserted (matching RTL)
             ref_count_r = 0;
-            `uvm_info("COUNT_R_UPDATE", $sformatf("Time=%0t: count_r reset to 0 (out_eop=%0b)", 
+            `uvm_info("COUNT_R_UPDATE", $sformatf("Time=%0t: count_r reset to 0 (out_eop=%0b) - FIRST PRIORITY", 
                      $time, ref_out_eop), UVM_LOW)
+        end else if (ref_deq_req_r && (read_state_prev == READ_HEADER || read_state_prev == READ_DATA)) begin
+            // SECOND PRIORITY: Increment count_r only if NOT out_eop (matching RTL)
+            ref_count_r = ref_count_r + 1;
+            `uvm_info("COUNT_R_UPDATE", $sformatf("Time=%0t: count_r incremented to %0d (deq_req_r=%0b, prev_state=%0d) - SECOND PRIORITY", 
+                     $time, ref_count_r, ref_deq_req_r, read_state_prev), UVM_LOW)
         end
         
         // Debug count_w tracking for packet drop
@@ -1264,6 +1265,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Debug count_r timing alignment with RTL
         `uvm_info("COUNT_R_TIMING", $sformatf("Time=%0t: count_r timing: current=%0d, will_update=%0b, out_eop=%0b (RTL always_ff timing)", 
                  $time, ref_count_r, ref_deq_req_r && (read_state_prev == READ_HEADER || read_state_prev == READ_DATA), ref_out_eop), UVM_LOW)
+        
+        // Debug count_r priority logic to match RTL
+        if (ref_out_eop) begin
+            `uvm_info("COUNT_R_PRIORITY", $sformatf("Time=%0t: count_r PRIORITY: out_eop=1 takes precedence, count_r will be reset to 0", $time), UVM_LOW)
+        end else if (ref_deq_req_r && (read_state_prev == READ_HEADER || read_state_prev == READ_DATA)) begin
+            `uvm_info("COUNT_R_PRIORITY", $sformatf("Time=%0t: count_r PRIORITY: out_eop=0, count_r will increment from %0d to %0d", 
+                     $time, ref_count_r, ref_count_r + 1), UVM_LOW)
+        end
     endfunction
 
     function void update_combinational_outputs(pkt_proc_seq_item tr);
