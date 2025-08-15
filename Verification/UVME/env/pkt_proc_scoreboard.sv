@@ -289,6 +289,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // CRITICAL FIX: Update wr_lvl for next cycle (matching RTL always_ff behavior)
         ref_wr_lvl = ref_wr_lvl_next;
 
+        ref_buffer_full_prev  = ref_buffer_full;
+        ref_buffer_empty_prev = ref_buffer_empty;
+        ref_overflow_prev = ref_overflow;
+        ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
+        
         // ============================================================================
         // PHASE 2: Update buffer states FIRST (before packet drop logic)
         // ============================================================================
@@ -359,10 +364,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ============================================================================
         generate_write_read_enables(tr);           // Uses ref_packet_drop, sets ref_wr_en, ref_rd_en
          
-        ref_buffer_full_prev  = ref_buffer_full;
-        ref_buffer_empty_prev = ref_buffer_empty;
-        ref_overflow_prev = ref_overflow;
-        ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
+        // ref_buffer_full_prev  = ref_buffer_full;
+        // //ref_buffer_empty_prev = ref_buffer_empty;
+        // ref_overflow_prev = ref_overflow;
+        // ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
         
        
         // ============================================================================
@@ -551,7 +556,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                      $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
         end
 
-        
+
         // Debug next states computed after packet drop logic
         `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: Next states recomputed after packet drop - WRITE: %0d -> %0d, READ: %0d -> %0d, packet_drop=%0b", 
                  $time, write_state, write_state_next, read_state, read_state_next, ref_packet_drop), UVM_LOW)
