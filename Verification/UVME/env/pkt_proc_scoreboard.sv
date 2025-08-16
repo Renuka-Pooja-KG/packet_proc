@@ -419,20 +419,23 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             // CRITICAL FIX: Packet length buffer operations (matching RTL exactly)
             // RTL writes to pck_len_buffer in WRITE_HEADER state regardless of wr_en
             if (write_state == WRITE_HEADER) begin
-                // Use RTL logic exactly: pck_len_r2 = (pck_len_valid_r1) ? pck_len_i_r1 : ((in_sop_r1) ? wr_data_r1[11:0] : packet_length)
-                // CRITICAL: These _r1 values contain the PREVIOUS cycle's values (when in_sop=1, pck_len_valid=1)
+                // CRITICAL FIX: When in WRITE_HEADER state, use CURRENT cycle's pck_len_i and pck_len_valid
+                // This fixes the issue where packet length was not being captured correctly in the next cycle
                 bit [11:0] pck_len_r2_value;
-                if (ref_pck_len_valid_r1) begin
-                    pck_len_r2_value = ref_pck_len_i_r1;
-                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using pck_len_i_r1=%0d (pck_len_valid_r1=1)", 
-                             $time, ref_pck_len_i_r1), UVM_LOW)
-                end else if (ref_in_sop_r1) begin
-                    pck_len_r2_value = ref_wr_data_r1[11:0];
-                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using wr_data_r1[11:0]=%0d (in_sop_r1=1)", 
-                             $time, ref_wr_data_r1[11:0]), UVM_LOW)
+                if (tr.pck_len_valid) begin
+                    // Use current cycle's packet length input
+                    pck_len_r2_value = tr.pck_len_i;
+                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using CURRENT pck_len_i=%0d (pck_len_valid=1)", 
+                             $time, tr.pck_len_i), UVM_LOW)
+                end else if (tr.in_sop) begin
+                    // Use current cycle's wr_data_i if no valid packet length
+                    pck_len_r2_value = tr.wr_data_i[11:0];
+                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using CURRENT wr_data_i[11:0]=%0d (in_sop=1)", 
+                             $time, tr.wr_data_i[11:0]), UVM_LOW)
                 end else begin
-                    pck_len_r2_value = ref_packet_length_w;  // Keep previous value
-                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using prev_packet_length=%0d (both conditions false)", 
+                    // Fallback to previous packet length
+                    pck_len_r2_value = ref_packet_length_w;
+                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using prev_packet_length=%0d (fallback)", 
                              $time, ref_packet_length_w), UVM_LOW)
                 end
                 
@@ -1247,20 +1250,23 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             // Packet length buffer operations (matching RTL exactly)
             // RTL writes to pck_len_buffer in WRITE_HEADER state regardless of wr_en
             if (write_state == WRITE_HEADER) begin
-                // Use RTL logic exactly: pck_len_r2 = (pck_len_valid_r1) ? pck_len_i_r1 : ((in_sop_r1) ? wr_data_r1[11:0] : packet_length)
-                // CRITICAL: These _r1 values contain the PREVIOUS cycle's values (when in_sop=1, pck_len_valid=1)
+                // CRITICAL FIX: When in WRITE_HEADER state, use CURRENT cycle's pck_len_i and pck_len_valid
+                // This fixes the issue where packet length was not being captured correctly in the next cycle
                 bit [11:0] pck_len_r2_value;
-                if (ref_pck_len_valid_r1) begin
-                    pck_len_r2_value = ref_pck_len_i_r1;
-                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using pck_len_i_r1=%0d (pck_len_valid_r1=1)", 
-                             $time, ref_pck_len_i_r1), UVM_LOW)
-                end else if (ref_in_sop_r1) begin
-                    pck_len_r2_value = ref_wr_data_r1[11:0];
-                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using wr_data_r1[11:0]=%0d (in_sop_r1=1)", 
-                             $time, ref_wr_data_r1[11:0]), UVM_LOW)
+                if (tr.pck_len_valid) begin
+                    // Use current cycle's packet length input
+                    pck_len_r2_value = tr.pck_len_i;
+                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using CURRENT pck_len_i=%0d (pck_len_valid=1)", 
+                             $time, tr.pck_len_i), UVM_LOW)
+                end else if (tr.in_sop) begin
+                    // Use current cycle's wr_data_i if no valid packet length
+                    pck_len_r2_value = tr.wr_data_i[11:0];
+                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using CURRENT wr_data_i[11:0]=%0d (in_sop=1)", 
+                             $time, tr.wr_data_i[11:0]), UVM_LOW)
                 end else begin
-                    pck_len_r2_value = ref_packet_length_w;  // Keep previous value
-                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using prev_packet_length=%0d (both conditions false)", 
+                    // Fallback to previous packet length
+                    pck_len_r2_value = ref_packet_length_w;
+                    `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: WRITE_HEADER: Using prev_packet_length=%0d (fallback)", 
                              $time, ref_packet_length_w), UVM_LOW)
                 end
                 
