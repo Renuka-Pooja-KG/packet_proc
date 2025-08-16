@@ -108,6 +108,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     int total_transactions = 0;
     int errors = 0;
 
+    bit data_available;
+    bit data_available_next;
+    bit data_available_for_comparison;
+
+
+
     function new(string name, uvm_component parent);
         super.new(name, parent);
         analysis_export = new("analysis_export", this);
@@ -204,6 +210,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Initialize temporary variables
         temp_full = 0;
         temp_empty = 0;
+
+        data_available = 0;
+        data_available_next = 0;
+        data_available_for_comparison = 0;
     endfunction
 
     function void write(pkt_proc_seq_item tr);
@@ -872,6 +882,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_rd_en = 0;
             ref_wr_lvl_next = 0;
             ref_rd_ptr_next = 0;  // Reset next cycle's read pointer
+
+            data_available = 0;
+            data_available_next = 0;
+            data_available_for_comparison = 0;
             
             return; // Exit early - no further processing during reset
         end
@@ -1002,7 +1016,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             IDLE_R: begin
                 // Use registered values (matching RTL behavior exactly)
                 // CRITICAL FIX: Handle concurrent read/write operations properly
-                bit data_available = 0;
+                data_available = 0;
                 if (!ref_buffer_empty) begin
                     // Normal case: data available in buffer
                     data_available = 1;
@@ -1027,7 +1041,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             
             READ_DATA: begin
                 // CRITICAL FIX: Handle concurrent read/write operations properly
-                bit data_available = 0;
+                data_available = 0;
                 if (!ref_buffer_empty) begin
                     // Normal case: data available in buffer
                     data_available = 1;
