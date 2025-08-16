@@ -1062,7 +1062,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                      $time, ref_in_sop_r1, ref_in_eop_r1, write_state), UVM_LOW)
         end
         
-        invalid_3 = (tr.in_sop && (~ref_in_eop_r1) && (write_state == WRITE_DATA));
+        invalid_3 = (ref_in_sop_r1 && (~ref_in_eop_r2) && (write_state == WRITE_DATA));
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_4
         // invalid_4 = (count_w < (pck_len_r2 - 1)) && (pck_len_r2 != 0) && (in_eop_r1)
         invalid_4 = (write_state == WRITE_DATA) && 
