@@ -1226,7 +1226,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // Debug buffer state
-        `uvm_info("BUFFER_DEBUG", $sformatf("Buffer State: rd_ptr=%0d, pck_len_wr_ptr=%0d, pck_len_rd_ptr=%0d, empty=%0b, full=%0b, empty_de_assert=%0b, tr.in_sop=%0b, ref_in_sop_r=%0b, ref_in_sop_r1=%0b, ref_in_sop_r2=%0b, tr.in_eop=%0b, ref_in_eop_r=%0b, ref_in_eop_r1=%0b, ref_in_eop_r2=%0b", 
+        `uvm_info("BUFFER_DEBUG", $sformatf("Buffer State: rd_ptr=%0d, pck_len_wr_ptr=%0d, pck_len_rd_ptr=%0d, empty=%0b, full=%0b, empty_de_assert=%0b, in_sop=%0b, in_sop_r=%0b, in_sop_r1=%0b, in_sop_r2=%0b, in_eop=%0b, in_eop_r=%0b, in_eop_r1=%0b, in_eop_r2=%0b", 
                  ref_rd_ptr, ref_pck_len_wr_ptr, ref_pck_len_rd_ptr, ref_buffer_empty, ref_buffer_full, ref_empty_de_assert, tr.in_sop, ref_in_sop_r, ref_in_sop_r1, ref_in_sop_r2, tr.in_eop, ref_in_eop_r, ref_in_eop_r1, ref_in_eop_r2), UVM_LOW)
         
         // No longer need buffer_empty_r since we use simple wr_lvl-based logic
