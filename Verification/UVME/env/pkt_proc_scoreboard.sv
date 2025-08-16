@@ -843,29 +843,30 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
     function void update_pipeline_registers(pkt_proc_seq_item tr);
         // Pipeline registers (matching RTL exactly)
-        ref_in_sop_r2 = ref_in_sop_r;
-        ref_in_sop_r = ref_in_sop_r1;
-        ref_in_sop_r1 = tr.in_sop;
+        // CRITICAL FIX: Correct pipeline order - shift values from previous cycle
+        ref_in_sop_r2 = ref_in_sop_r1;  // 2-cycle delayed in_sop
+        ref_in_sop_r1 = ref_in_sop_r;   // 1-cycle delayed in_sop  
+        ref_in_sop_r = tr.in_sop;       // Current cycle in_sop
         
-        ref_in_eop_r2 = ref_in_eop_r;
-        ref_in_eop_r = ref_in_eop_r1;
-        ref_in_eop_r1 = tr.in_eop;
+        ref_in_eop_r2 = ref_in_eop_r1;  // 2-cycle delayed in_eop
+        ref_in_eop_r1 = ref_in_eop_r;   // 1-cycle delayed in_eop
+        ref_in_eop_r = tr.in_eop;       // Current cycle in_eop
         
-        ref_enq_req_r1 = ref_enq_req_r;
-        ref_enq_req_r = tr.enq_req;
+        ref_enq_req_r1 = ref_enq_req_r; // 1-cycle delayed enq_req
+        ref_enq_req_r = tr.enq_req;     // Current cycle enq_req
         
-        ref_wr_data_r = ref_wr_data_r1;
-        ref_wr_data_r1 = tr.wr_data_i;
+        ref_wr_data_r1 = ref_wr_data_r; // 1-cycle delayed wr_data
+        ref_wr_data_r = tr.wr_data_i;   // Current cycle wr_data
         
-        ref_pck_len_valid_r = ref_pck_len_valid_r1;
-        ref_pck_len_valid_r1 = tr.pck_len_valid;
+        ref_pck_len_valid_r1 = ref_pck_len_valid_r;  // 1-cycle delayed pck_len_valid
+        ref_pck_len_valid_r = tr.pck_len_valid;      // Current cycle pck_len_valid
         
-        ref_pck_len_i_r = ref_pck_len_i_r1;
-        ref_pck_len_i_r1 = tr.pck_len_i;
+        ref_pck_len_i_r1 = ref_pck_len_i_r;         // 1-cycle delayed pck_len_i
+        ref_pck_len_i_r = tr.pck_len_i;             // Current cycle pck_len_i
         
         // Debug pipeline register updates
-        `uvm_info("PIPELINE_UPDATE", $sformatf("Time=%0t: Pipeline updated - in_sop_r1=%0b->%0b, pck_len_valid_r1=%0b->%0b, pck_len_i_r1=%0d->%0d", 
-                 $time, ref_in_sop_r1, tr.in_sop, ref_pck_len_valid_r1, tr.pck_len_valid, ref_pck_len_i_r1, tr.pck_len_i), UVM_LOW)
+        `uvm_info("PIPELINE_UPDATE", $sformatf("Time=%0t: Pipeline updated - in_sop: %0b->%0b->%0b->%0b, in_eop: %0b->%0b->%0b->%0b", 
+                 $time, tr.in_sop, ref_in_sop_r, ref_in_sop_r1, ref_in_sop_r2, tr.in_eop, ref_in_eop_r, ref_in_eop_r1, ref_in_eop_r2), UVM_LOW)
         
         // Model RTL register on deq_req: stage and then register
         ref_deq_req_r1 = tr.deq_req;  // sample input
