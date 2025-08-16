@@ -865,8 +865,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_len_i_r = tr.pck_len_i;             // Current cycle pck_len_i
         
         // Debug pipeline register updates
-        `uvm_info("PIPELINE_UPDATE", $sformatf("Time=%0t: Pipeline updated - in_sop: %0b->%0b->%0b->%0b, in_eop: %0b->%0b->%0b->%0b", 
-                 $time, tr.in_sop, ref_in_sop_r, ref_in_sop_r1, ref_in_sop_r2, tr.in_eop, ref_in_eop_r, ref_in_eop_r1, ref_in_eop_r2), UVM_LOW)
+        `uvm_info("PIPELINE_UPDATE", $sformatf("Time=%0t: Pipeline updated - in_sop: %0b->%0b->%0b, in_eop: %0b->%0b->%0b", 
+                 $time, tr.in_sop, ref_in_sop_r1, ref_in_sop_r2, tr.in_eop, ref_in_eop_r1, ref_in_eop_r2), UVM_LOW)
         
         // Model RTL register on deq_req: stage and then register
         ref_deq_req_r1 = tr.deq_req;  // sample input
@@ -1084,8 +1084,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         any_invalid_condition = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6);
         
         // Debug: Show condition calculations that use ref_packet_length_w
-        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (ref_in_sop_r1=%0b && ~ref_in_eop_r1=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && ref_in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
-                 $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, ref_in_sop_r1, ref_in_eop_r1, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
+        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (ref_in_sop_r1=%0b && ~ref_in_eop_r1=%0b && state=%0d)", 
+                 $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, ref_in_sop_r1, ref_in_eop_r1, write_state), UVM_LOW)
+        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && ref_in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
+                 $time, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
 
         // CRITICAL FIX: RTL emulation - Use DUT's packet_drop signal directly (matching RTL exactly)
         // RTL generates packet_drop as a combinational output based on pck_invalid logic
@@ -1093,8 +1095,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         if (tr.packet_drop) begin
             // DUT detected packet drop - verify our logic matches
             if (any_invalid_condition && tr.enq_req) begin
-                `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: DUT packet_drop=1 confirmed: enq_req=1, state=%0d, invalid_1=%0b, invalid_3=%0b, invalid_4=%0b, invalid_5=%0b, invalid_6=%0b, count_w=%0d, pck_len_w=%0d, in_sop_r1=%0b, in_eop_r1=%0b",
-                         $time, write_state, invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, ref_count_w, ref_packet_length_w, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
+                `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: DUT packet_drop=1 confirmed: enq_req=1, state=%0d, invalid_1=%0b, invalid_3=%0b, invalid_4=%0b", 
+                         $time, write_state, invalid_1, invalid_3, invalid_4), UVM_LOW)
+                `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: invalid_5=%0b, invalid_6=%0b, count_w=%0d, pck_len_w=%0d, in_sop_r1=%0b, in_eop_r1=%0b", 
+                         $time, invalid_5, invalid_6, ref_count_w, ref_packet_length_w, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
                 
                 // Additional debug for invalid_1 specifically
                 if (invalid_1) begin
@@ -1226,8 +1230,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
         
         // Debug buffer state
-        `uvm_info("BUFFER_DEBUG", $sformatf("Buffer State: rd_ptr=%0d, pck_len_wr_ptr=%0d, pck_len_rd_ptr=%0d, empty=%0b, full=%0b, empty_de_assert=%0b, in_sop=%0b, in_sop_r=%0b, in_sop_r1=%0b, in_sop_r2=%0b, in_eop=%0b, in_eop_r=%0b, in_eop_r1=%0b, in_eop_r2=%0b", 
-                 ref_rd_ptr, ref_pck_len_wr_ptr, ref_pck_len_rd_ptr, ref_buffer_empty, ref_buffer_full, ref_empty_de_assert, tr.in_sop, ref_in_sop_r, ref_in_sop_r1, ref_in_sop_r2, tr.in_eop, ref_in_eop_r, ref_in_eop_r1, ref_in_eop_r2), UVM_LOW)
+        `uvm_info("BUFFER_DEBUG", $sformatf("Buffer State: rd_ptr=%0d, pck_len_wr_ptr=%0d, pck_len_rd_ptr=%0d, empty=%0b, full=%0b, empty_de_assert=%0b, in_sop_r=%0b, in_sop_r1=%0b, in_sop_r2=%0b, in_eop_r=%0b, in_eop_r1=%0b, in_eop_r2=%0b",   
+                 ref_rd_ptr, ref_pck_len_wr_ptr, ref_pck_len_rd_ptr, ref_buffer_empty, ref_buffer_full, ref_empty_de_assert, ref_in_sop_r, ref_in_sop_r1, ref_in_sop_r2, ref_in_eop_r, ref_in_eop_r1, ref_in_eop_r2), UVM_LOW)
         
         // No longer need buffer_empty_r since we use simple wr_lvl-based logic
         
