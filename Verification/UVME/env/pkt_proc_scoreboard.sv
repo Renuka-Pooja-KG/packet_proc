@@ -109,7 +109,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     int errors = 0;
 
     bit data_available;
-    bit data_available_next;
+    bit data_will_be_available;
     bit data_available_for_comparison;
 
 
@@ -212,7 +212,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         temp_empty = 0;
 
         data_available = 0;
-        data_available_next = 0;
+        data_will_be_available = 0;
         data_available_for_comparison = 0;
     endfunction
 
@@ -884,7 +884,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_rd_ptr_next = 0;  // Reset next cycle's read pointer
 
             data_available = 0;
-            data_available_next = 0;
+            data_will_be_available = 0;
             data_available_for_comparison = 0;
             
             return; // Exit early - no further processing during reset
