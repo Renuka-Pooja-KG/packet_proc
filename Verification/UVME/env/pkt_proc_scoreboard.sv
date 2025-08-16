@@ -442,14 +442,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             // RTL: wr_ptr <= wr_ptr - count_w (or wr_ptr - count_w + 1 for invalid_3)
             if (invalid_3) begin
                 // Special case: pck_drop && invalid_3
-                ref_wr_ptr_next = ref_wr_ptr - ref_count_w_prev + 1;
-                `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: Packet drop (invalid_3): wr_ptr %0d -> %0d (count_w_prev=%0d, +1)", 
-                         $time, ref_wr_ptr, ref_wr_ptr_next, ref_count_w_prev), UVM_LOW)
+                ref_wr_ptr_next = ref_wr_ptr - ref_count_w + 1;
+                `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: Packet drop (invalid_3): wr_ptr %0d -> %0d (count_w=%0d, +1)", 
+                         $time, ref_wr_ptr, ref_wr_ptr_next, ref_count_w), UVM_LOW)
             end else begin
                 // Normal packet drop: decrement wr_ptr by count_w
-                ref_wr_ptr_next = ref_wr_ptr - ref_count_w_prev;
-                `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: Packet drop: wr_ptr %0d -> %0d (count_w_prev=%0d)", 
-                         $time, ref_wr_ptr, ref_wr_ptr_next, ref_count_w_prev), UVM_LOW)
+                ref_wr_ptr_next = ref_wr_ptr - ref_count_w;
+                `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: Packet drop: wr_ptr %0d -> %0d (count_w=%0d)", 
+                         $time, ref_wr_ptr, ref_wr_ptr_next, ref_count_w), UVM_LOW)
             end
             
             // CRITICAL DEBUG: Track buffer writes when wr_lvl = 0
