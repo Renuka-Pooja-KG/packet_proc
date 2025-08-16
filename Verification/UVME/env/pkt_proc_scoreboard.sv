@@ -478,7 +478,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // We check for write to current read location (not concurrent read/write) to avoid negative wr_lvl
         if (ref_deq_req_r && (read_state == READ_HEADER || read_state == READ_DATA)) begin
             // Check if data is available for reading
-            bit data_available = 0;
+            data_available = 0;
             
             if (!ref_buffer_empty) begin
                 // Normal case: data available in buffer
@@ -581,7 +581,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end else if (tr.deq_req && (read_state_next == READ_HEADER || read_state_next == READ_DATA)) begin
             // PENDING READ: deq_req is asserted and FSM will transition to read state next cycle
             // Check if data will be available for reading
-            bit data_will_be_available = 0;
+            data_will_be_available = 0;
             if (!ref_buffer_empty) begin
                 // Normal case: data available in buffer
                 data_will_be_available = 1;
@@ -1479,7 +1479,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // CRITICAL FIX: Compare rd_data_o only when ref_deq_req_r is high (matching RTL timing)
         // RTL generates rd_data_o based on deq_req_r, not the current cycle's deq_req
         // CRITICAL FIX: Handle concurrent read/write operations properly
-        bit data_available_for_comparison = 0;
+        data_available_for_comparison = 0;
         if (!ref_buffer_empty) begin
             // Normal case: data available in buffer
             data_available_for_comparison = 1;
