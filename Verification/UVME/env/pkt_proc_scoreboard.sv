@@ -388,13 +388,13 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 // CRITICAL DEBUG: Track buffer writes when wr_lvl = 0
                 if (ref_wr_lvl == 0) begin
                     `uvm_info("BUFFER_WRITE_DEBUG", $sformatf("Time=%0t: WRITING TO BUFFER[0]: wr_en=%0b, buffer_full=%0b, state=%0d, data=0x%0h", 
-                             $time, ref_wr_en, ref_buffer_full, write_state, ref_wr_data_r1), UVM_LOW)
+                             $time, ref_wr_en, ref_buffer_full, write_state, ref_wr_data_r), UVM_LOW)
                 end
                 
                 if (write_state == WRITE_HEADER) begin
-                    ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r1;  // Use write pointer, NOT wr_lvl
+                    ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r;  // Use write pointer, NOT wr_lvl
                 end else if (write_state == WRITE_DATA) begin
-                    ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r1;  // Use write pointer, NOT wr_lvl
+                    ref_buffer[ref_wr_ptr[13:0]] = ref_wr_data_r;  // Use write pointer, NOT wr_lvl
                 end
                 
                 // CRITICAL FIX: Increment write pointer for successful write operations
@@ -462,14 +462,39 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Read operations using CURRENT pipeline register values (matching RTL exactly)
         // RTL uses deq_req_r (current pipeline register value) to generate rd_en, so scoreboard must do the same
         // This prevents the 1-cycle timing mismatch where rd_data_o is read even when deq_req=0
-        if (ref_deq_req_r && !ref_buffer_empty && (read_state == READ_HEADER || read_state == READ_DATA)) begin
-            // CRITICAL FIX: Simplified pointer-based timing - read immediately, advance pointer with delay
-            // Read data directly from buffer using current pointer (immediate)
-            ref_rd_data_o = ref_buffer[ref_rd_ptr[13:0]];
-            // Calculate next read pointer position (will be updated on next cycle)
-            ref_rd_ptr_next = ref_rd_ptr + 1;
-            `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: Read operation: deq_req_r=%0b, state=%0d, rd_data=0x%0h, current_ptr=%0d, next_ptr=%0d (pointer advances next cycle)", 
-                     $time, ref_deq_req_r, read_state, ref_rd_data_o, ref_rd_ptr, ref_rd_ptr_next), UVM_LOW)
+        // CRITICAL FIX: Handle concurrent read/write operations properly
+        // This fixes the issue where rd_data_expected was one cycle slower than DUT in concurrent test
+        // The key insight: data is available if there's data in the buffer OR if we're about to write data
+        // We check for write to current read location (not concurrent read/write) to avoid negative wr_lvl
+        if (ref_deq_req_r && (read_state == READ_HEADER || read_state == READ_DATA)) begin
+            // Check if data is available for reading
+            bit data_available = 0;
+            
+            if (!ref_buffer_empty) begin
+                // Normal case: data available in buffer
+                data_available = 1;
+            end else if (ref_wr_en && (ref_wr_ptr == ref_rd_ptr)) begin
+                // Special case: writing to current read location, data will be available after write
+                // This ensures we don't read stale data, but also don't create negative wr_lvl
+                data_available = 1;
+                `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: WRITE to current read location: wr_ptr=%0d, rd_ptr=%0d, data will be available after write", 
+                         $time, ref_wr_ptr, ref_rd_ptr), UVM_LOW)
+            end
+            
+            if (data_available) begin
+                // CRITICAL FIX: Simplified pointer-based timing - read immediately, advance pointer with delay
+                // Read data directly from buffer using current pointer (immediate)
+                ref_rd_data_o = ref_buffer[ref_rd_ptr[13:0]];
+                // Calculate next read pointer position (will be updated on next cycle)
+                ref_rd_ptr_next = ref_rd_ptr + 1;
+                `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: Read operation: deq_req_r=%0b, state=%0d, rd_data=0x%0h, current_ptr=%0d, next_ptr=%0d (pointer advances next cycle)", 
+                         $time, ref_deq_req_r, read_state, ref_rd_data_o, ref_rd_ptr, ref_rd_ptr_next), UVM_LOW)
+            end else begin
+                // No data available - keep pointer unchanged
+                ref_rd_ptr_next = ref_rd_ptr;
+                `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: No data available for read: deq_req_r=%0b, state=%0d, wr_en=%0b, rd_en=%0b, wr_ptr=%0d, rd_ptr=%0d, buffer_empty=%0b", 
+                         $time, ref_deq_req_r, read_state, ref_wr_en, ref_rd_en, ref_wr_ptr, ref_rd_ptr, ref_buffer_empty), UVM_LOW)
+            end
         end else begin
             // No read operation this cycle - keep pointer unchanged
             ref_rd_ptr_next = ref_rd_ptr;
@@ -543,12 +568,29 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
             `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: READ ONLY: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
                      $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
-        end else if (tr.deq_req && !ref_buffer_empty && (read_state_next == READ_HEADER || read_state_next == READ_DATA)) begin
+        end else if (tr.deq_req && (read_state_next == READ_HEADER || read_state_next == READ_DATA)) begin
             // PENDING READ: deq_req is asserted and FSM will transition to read state next cycle
-            // wr_lvl should decrease by 1 because read will happen next cycle
-            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
-            `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: PENDING READ: wr_lvl_next=%0d (deq_req=1, next_state=%0d, wr_ptr_next=%0d - rd_ptr_next=%0d - 1)", 
-                     $time, ref_wr_lvl_next, read_state_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
+            // Check if data will be available for reading
+            bit data_will_be_available = 0;
+            if (!ref_buffer_empty) begin
+                // Normal case: data available in buffer
+                data_will_be_available = 1;
+            end else if (ref_wr_en && (ref_wr_ptr_next == ref_rd_ptr_next)) begin
+                // Special case: writing to current read location, data will be available after write
+                data_will_be_available = 1;
+            end
+            
+            if (data_will_be_available) begin
+                // wr_lvl should decrease by 1 because read will happen next cycle
+                ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
+                `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: PENDING READ: wr_lvl_next=%0d (deq_req=1, next_state=%0d, wr_ptr_next=%0d - rd_ptr_next=%0d - 1, data_available=%0b)", 
+                         $time, ref_wr_lvl_next, read_state_next, ref_wr_ptr_next, ref_rd_ptr_next, data_will_be_available), UVM_LOW)
+            end else begin
+                // No data available - wr_lvl stays constant
+                ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
+                `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: PENDING READ (no data): wr_lvl_next=%0d (deq_req=1, next_state=%0d, wr_ptr_next=%0d - rd_ptr_next=%0d, data_available=%0b)", 
+                         $time, ref_wr_lvl_next, read_state_next, ref_wr_ptr_next, ref_rd_ptr_next, data_will_be_available), UVM_LOW)
+            end
         end else begin
             // No operation: wr_lvl stays constant (both pointers stay)
             ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next;
@@ -953,13 +995,26 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void compute_read_next_state(pkt_proc_seq_item tr);
+        // CRITICAL FIX: Read state machine now properly handles write to current read location
+        // When wr_ptr == rd_ptr and wr_en is high, data will be available after write
+        // This prevents the 1-cycle delay in read operations that was causing rd_data_expected mismatch
         unique case (read_state)
             IDLE_R: begin
                 // Use registered values (matching RTL behavior exactly)
-                if (ref_deq_req_r && !ref_buffer_empty) begin
+                // CRITICAL FIX: Handle concurrent read/write operations properly
+                bit data_available = 0;
+                if (!ref_buffer_empty) begin
+                    // Normal case: data available in buffer
+                    data_available = 1;
+                end else if (ref_wr_en && (ref_wr_ptr == ref_rd_ptr)) begin
+                    // Special case: writing to current read location, data will be available after write
+                    data_available = 1;
+                end
+                
+                if (ref_deq_req_r && data_available) begin
                     read_state_next = READ_HEADER;
-                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: IDLE_R -> READ_HEADER (deq_req_r=%0b, buffer_empty=%0b)", 
-                             $time, ref_deq_req_r, ref_buffer_empty), UVM_LOW)
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: IDLE_R -> READ_HEADER (deq_req_r=%0b, data_available=%0b, wr_en=%0b, rd_en=%0b, wr_ptr=%0d, rd_ptr=%0d)", 
+                             $time, ref_deq_req_r, data_available, ref_wr_en, ref_rd_en, ref_wr_ptr, ref_rd_ptr), UVM_LOW)
                 end else begin
                     read_state_next = IDLE_R;
                 end
@@ -971,14 +1026,25 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             end
             
             READ_DATA: begin
-                if (ref_buffer_empty) begin
+                // CRITICAL FIX: Handle concurrent read/write operations properly
+                bit data_available = 0;
+                if (!ref_buffer_empty) begin
+                    // Normal case: data available in buffer
+                    data_available = 1;
+                end else if (ref_wr_en && (ref_wr_ptr == ref_rd_ptr)) begin
+                    // Special case: writing to current read location, data will be available after write
+                    data_available = 1;
+                end
+                
+                if (!data_available) begin
                     read_state_next = IDLE_R;
-                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_DATA -> IDLE_R (buffer empty)", $time), UVM_LOW)
-                end else if ((ref_count_r == (ref_packet_length - 1)) && ref_deq_req_r && !ref_buffer_empty) begin
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_DATA -> IDLE_R (no data available - wr_en=%0b, rd_en=%0b, wr_ptr=%0d, rd_ptr=%0d, buffer_empty=%0b)", 
+                             $time, ref_wr_en, ref_rd_en, ref_wr_ptr, ref_rd_ptr, ref_buffer_empty), UVM_LOW)
+                end else if ((ref_count_r == (ref_packet_length - 1)) && ref_deq_req_r && data_available) begin
                     read_state_next = READ_HEADER;  // Next packet
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_DATA -> READ_HEADER (next packet: count_r=%0d, pck_len=%0d, deq_req_r=%0b)", 
                              $time, ref_count_r, ref_packet_length, ref_deq_req_r), UVM_LOW)
-                end else if ((ref_count_r == (ref_packet_length - 1)) && (!ref_deq_req_r || ref_buffer_empty)) begin
+                end else if ((ref_count_r == (ref_packet_length - 1)) && (!ref_deq_req_r || !data_available)) begin
                     read_state_next = IDLE_R;  // End of packet
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: READ FSM: READ_DATA -> IDLE_R (end of packet: count_r=%0d, pck_len=%0d, deq_req_r=%0b)", 
                              $time, ref_count_r, ref_packet_length, ref_deq_req_r), UVM_LOW)
@@ -1398,7 +1464,17 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // CRITICAL FIX: Compare rd_data_o only when ref_deq_req_r is high (matching RTL timing)
         // RTL generates rd_data_o based on deq_req_r, not the current cycle's deq_req
-        if (ref_deq_req_r && !ref_buffer_empty) begin
+        // CRITICAL FIX: Handle concurrent read/write operations properly
+        bit data_available_for_comparison = 0;
+        if (!ref_buffer_empty) begin
+            // Normal case: data available in buffer
+            data_available_for_comparison = 1;
+        end else if (ref_wr_en && (ref_wr_ptr == ref_rd_ptr)) begin
+            // Special case: writing to current read location, data will be available after write
+            data_available_for_comparison = 1;
+        end
+        
+        if (ref_deq_req_r && data_available_for_comparison) begin
             if (tr.rd_data_o !== ref_rd_data_o) begin
                 `uvm_error("SCOREBOARD_NEW", $sformatf("rd_data_o mismatch: expected=0x%0h, got=0x%0h (deq_req_r=%0b, state=%0d)", 
                          ref_rd_data_o, tr.rd_data_o, ref_deq_req_r, read_state))
