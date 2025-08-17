@@ -55,6 +55,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_packet_drop;
     bit ref_packet_drop_prev;  // track rising edge of packet_drop for debug
     bit ref_in_packet;  // CRITICAL: RTL's in_packet signal for invalid_3 detection
+    bit ref_invalid3_first_word_handled;  // CRITICAL: Track if first word after invalid_3 was handled
     bit invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, any_invalid_condition; // packet drop conditions
     
     // Expected outputs
@@ -155,6 +156,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_packet_drop = 0;
         ref_packet_drop_prev = 0;
         ref_in_packet = 0;  // CRITICAL: Initialize in_packet to 0
+        ref_invalid3_first_word_handled = 0;  // CRITICAL: Initialize invalid3 first word handled flag
         invalid_1 = 0;
         invalid_3 = 0;
         invalid_4 = 0;
@@ -330,6 +332,10 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             // Here we just calculate count_w_next for next packet (matching RTL)
             ref_count_w_next = 0;
             
+            // CRITICAL: Reset the invalid3 first word handled flag when packet drop occurs
+            // This allows the fix to handle the first word of the next packet
+            ref_invalid3_first_word_handled = 0;
+            
             `uvm_info("PKT_DROP_DEBUG", $sformatf("Time=%0t: PACKET_DROP: count_w_next set to 0, wr_lvl_next will be calculated in update_write_level_next()", 
                      $time), UVM_LOW)
         end
@@ -460,6 +466,50 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                          $time, ref_wr_en, ref_buffer_full, write_state, ref_wr_data_r1), UVM_LOW)
             end
         end
+        
+        // CRITICAL FIX: Handle immediate write of new packet's first word after invalid_3 packet drop
+        // This ensures buffer continuity by writing the first word to the adjusted wr_ptr location
+        if (ref_packet_drop && invalid_3 && ref_in_sop_r1 && tr.enq_req && !ref_invalid3_first_word_handled) begin
+            // Detect transition from packet drop to new packet start
+            // Write the first word (b006) to the adjusted wr_ptr - 1 location (buffer[5])
+            bit [13:0] adjusted_wr_ptr_location;
+            adjusted_wr_ptr_location = ref_wr_ptr_next - 1;  // Use the adjusted wr_ptr from packet drop
+            
+            //ref_buffer[adjusted_wr_ptr_location] = tr.wr_data_i;  // Write current cycle's data
+            ref_buffer[adjusted_wr_ptr_location] = ref_wr_data_r1 ;  // Write current cycle's data
+            `uvm_info("INVALID_3_FIX_DEBUG", $sformatf("Time=%0t: INVALID_3 FIX: Writing first word 0x%0h to buffer[%0d] (adjusted_wr_ptr-1) after packet drop", 
+                     $time, ref_wr_data_r1, adjusted_wr_ptr_location), UVM_LOW)
+            
+            // CRITICAL: Update wr_ptr_next to point to the next location for subsequent writes
+            // This ensures the next word (b007) goes to buffer[6] as expected
+            ref_wr_ptr_next = ref_wr_ptr_next;  // Keep the adjusted wr_ptr from packet drop
+            
+            `uvm_info("INVALID_3_FIX_DEBUG", $sformatf("Time=%0t: INVALID_3 FIX: wr_ptr_next maintained at %0d for subsequent writes", 
+                     $time, ref_wr_ptr_next), UVM_LOW)
+            
+            // Mark that we've handled the first word
+            ref_invalid3_first_word_handled = 1;
+        end
+        
+        // CRITICAL FIX: Handle case where packet drop occurred in previous cycle and we need to write first word
+        // This catches the scenario where invalid_3 was detected in previous cycle but first word needs to be written now
+        // if (!ref_packet_drop && ref_packet_drop_prev && invalid_3 && tr.in_sop && tr.enq_req && !ref_invalid3_first_word_handled) begin
+        //     // Packet drop just ended, new packet starting
+        //     // Write the first word to the current wr_ptr location (which was adjusted in previous cycle)
+        //     ref_buffer[ref_wr_ptr[13:0]] = tr.wr_data_i;  // Write current cycle's data
+            
+        //     `uvm_info("INVALID_3_FIX_DEBUG", $sformatf("Time=%0t: INVALID_3 FIX: Writing first word 0x%0h to buffer[%0d] after packet drop transition", 
+        //              $time, tr.wr_data_i, ref_wr_ptr), UVM_LOW)
+            
+        //     // Increment wr_ptr for subsequent writes
+        //     ref_wr_ptr_next = ref_wr_ptr + 1;
+            
+        //     `uvm_info("INVALID_3_FIX_DEBUG", $sformatf("Time=%0t: INVALID_3 FIX: wr_ptr_next incremented to %0d for subsequent writes", 
+        //              $time, ref_wr_ptr_next), UVM_LOW)
+            
+        //     // Mark that we've handled the first word
+        //     ref_invalid3_first_word_handled = 1;
+        // end
         
         // Read operations using CURRENT pipeline register values (matching RTL exactly)
         // RTL uses deq_req_r (current pipeline register value) to generate rd_en, so scoreboard must do the same
