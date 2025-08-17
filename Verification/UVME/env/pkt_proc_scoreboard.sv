@@ -54,6 +54,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_pck_proc_overflow, ref_pck_proc_underflow;
     bit ref_packet_drop;
     bit ref_packet_drop_prev;  // track rising edge of packet_drop for debug
+    bit ref_in_packet;  // CRITICAL: RTL's in_packet signal for invalid_3 detection
     bit invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, any_invalid_condition; // packet drop conditions
     
     // Expected outputs
@@ -153,6 +154,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_pck_proc_underflow = 0;
         ref_packet_drop = 0;
         ref_packet_drop_prev = 0;
+        ref_in_packet = 0;  // CRITICAL: Initialize in_packet to 0
         invalid_1 = 0;
         invalid_3 = 0;
         invalid_4 = 0;
@@ -872,6 +874,17 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_deq_req_r  = ref_deq_req_r1; // registered output (1-cycle delayed)
         ref_empty_de_assert = tr.empty_de_assert;
         
+        // CRITICAL: Update ref_in_packet to match RTL's in_packet logic exactly
+        // RTL: in_packet is set when in_sop_r1 && !in_eop_r1, cleared when in_eop_r1 or packet_drop
+        if (ref_packet_drop && !ref_in_sop_r1) begin
+            ref_in_packet = 0;  // Clear when packet drop and not start of packet
+        end else if (ref_in_sop_r1 && !ref_in_eop_r1) begin
+            ref_in_packet = 1;  // Set when start of packet without end
+        end else if (ref_in_eop_r1) begin
+            ref_in_packet = 0;  // Clear when end of packet
+        end
+        // Otherwise maintain current value (ref_in_packet = ref_in_packet)
+        
         // CRITICAL FIX: Do NOT update ref_wr_lvl here - it should update on NEXT cycle like RTL
         // The RTL wr_lvl updates on the NEXT clock edge, not the current one
         // ref_wr_lvl = ref_wr_lvl_next;  // REMOVED - this was causing 1-cycle ahead behavior
@@ -894,26 +907,18 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 end
             end
             
+           
             WRITE_HEADER: begin
-                // Use current cycle values (matching RTL behavior exactly)
-                if (tr.in_sop) begin
-                    write_state_next = WRITE_HEADER;
+                if (ref_in_sop_r1 && ref_in_eop_r1) begin
+                    write_state_next = IDLE_W;  // Same cycle SOP+EOP
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> IDLE_W (in_sop_r1=%0b && in_eop_r1=%0b)", 
+                             $time, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
+                end else if (tr.in_sop) begin
+                    write_state_next = WRITE_HEADER;  // Current SOP
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_HEADER (in_sop=%0b)", 
                              $time, tr.in_sop), UVM_LOW)
-                end else if (ref_packet_drop) begin
-                    // CRITICAL FIX: When packet drop is detected, go to IDLE_W instead of ERROR
-                    // This matches RTL behavior where invalid packets are dropped and FSM returns to idle
-                    write_state_next = IDLE_W;
-                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> IDLE_W (packet_drop=%0b, invalid packet dropped)", 
-                             $time, ref_packet_drop), UVM_LOW)
-                    
-                    // CRITICAL DEBUG: Show why packet drop occurred
-                    if (invalid_1) begin
-                        `uvm_info("STATE_TRANSITION_DEBUG", $sformatf("Time=%0t: Transitioning to IDLE_W due to invalid_1: in_sop_r1=%0b && in_eop_r1=%0b (same cycle)", 
-                                 $time, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
-                    end
                 end else begin
-                    write_state_next = WRITE_DATA;
+                    write_state_next = WRITE_DATA;  // Default case
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_DATA (advance to data)", $time), UVM_LOW)
                 end
             end
@@ -1062,7 +1067,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                      $time, ref_in_sop_r1, ref_in_eop_r1, write_state), UVM_LOW)
         end
         
-        invalid_3 = (ref_in_sop_r1 && (~ref_in_eop_r1) && (write_state == WRITE_HEADER));
+        // CRITICAL FIX: Match RTL's invalid_3 logic exactly
+        // RTL: invalid_3 = (in_sop_r1 && in_packet) - "Back to back SOP without getting EOP"
+        invalid_3 = (ref_in_sop_r1 && ref_in_packet);
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_4
         // invalid_4 = (count_w < (pck_len_r2 - 1)) && (pck_len_r2 != 0) && (in_eop_r1)
         invalid_4 = (write_state == WRITE_DATA) && 
@@ -1103,8 +1110,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
                 // Additional debug for invalid_3 specifically
                 if (invalid_3) begin
-                    `uvm_info("INVALID_3_DEBUG", $sformatf("Time=%0t: INVALID_3 triggered: in_sop=%0b && ~in_eop_r1=%0b && state=%0d", 
-                             $time, tr.in_sop, ref_in_eop_r1, write_state), UVM_LOW)
+                    `uvm_info("INVALID_3_DEBUG", $sformatf("Time=%0t: INVALID_3 triggered: in_sop_r1=%0b && in_packet=%0b (RTL logic)", 
+                             $time, ref_in_sop_r1, ref_in_packet), UVM_LOW)
                 end
                 
                 // Additional debug for invalid_4 specifically
