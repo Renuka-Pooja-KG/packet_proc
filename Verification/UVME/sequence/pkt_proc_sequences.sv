@@ -236,6 +236,160 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     end
   endtask
 
+  // Helper task to write packet with pattern-based data for comprehensive bit coverage
+  task write_packet_with_pattern(int pkt_length, bit [31:0] pattern1, bit [31:0] pattern2);
+    `uvm_info(get_type_name(), $sformatf("Writing pattern packet: length=%0d, pattern1=0x%0h, pattern2=0x%0h", 
+             pkt_length, pattern1, pattern2), UVM_MEDIUM)
+
+    if (pkt_length <= 0) begin
+      `uvm_error(get_type_name(), "Packet length must be >= 1")
+      return;
+    end
+
+    for (int i = 0; i < pkt_length; i++) begin
+      bit is_sop = (i == 0);
+      bit is_eop = (i == pkt_length-1);
+      string tr_name = is_sop ? "tr_pattern_sop" : (is_eop ? "tr_pattern_eop" : $sformatf("tr_pattern_data_%0d", i));
+
+      tr = pkt_proc_seq_item::type_id::create(tr_name);
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
+      tr.empty_de_assert = 1'b0;
+      tr.enq_req = 1'b1;
+      tr.deq_req = 1'b0;
+      tr.in_sop = is_sop;
+      tr.in_eop = is_eop;
+      // Alternate between two patterns to maximize bit toggle coverage
+      tr.wr_data_i = (i % 2 == 0) ? pattern1 : pattern2;
+      tr.pck_len_valid = is_sop;
+      tr.pck_len_i = pkt_length[11:0];
+      tr.pck_proc_almost_full_value = almost_full_value;
+      tr.pck_proc_almost_empty_value = almost_empty_value;
+      finish_item(tr);
+    end
+  endtask
+
+  // Helper task to write walking ones pattern (each bit position gets a 1)
+  task write_walking_ones_pattern(int pkt_length);
+    `uvm_info(get_type_name(), $sformatf("Writing walking ones pattern: length=%0d", pkt_length), UVM_MEDIUM)
+
+    if (pkt_length <= 0) begin
+      `uvm_error(get_type_name(), "Packet length must be >= 1")
+      return;
+    end
+
+    for (int i = 0; i < pkt_length; i++) begin
+      bit is_sop = (i == 0);
+      bit is_eop = (i == pkt_length-1);
+      string tr_name = is_sop ? "tr_walk1_sop" : (is_eop ? "tr_walk1_eop" : $sformatf("tr_walk1_data_%0d", i));
+
+      tr = pkt_proc_seq_item::type_id::create(tr_name);
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
+      tr.empty_de_assert = 1'b0;
+      tr.enq_req = 1'b1;
+      tr.deq_req = 1'b0;
+      tr.in_sop = is_sop;
+      tr.in_eop = is_eop;
+      // Walking ones: 0x00000001, 0x00000002, 0x00000004, 0x00000008, etc.
+      tr.wr_data_i = (32'h1 << (i % 32));
+      tr.pck_len_valid = is_sop;
+      tr.pck_len_i = pkt_length[11:0];
+      tr.pck_proc_almost_full_value = almost_full_value;
+      tr.pck_proc_almost_empty_value = almost_empty_value;
+      finish_item(tr);
+    end
+  endtask
+
+  // Helper task to write walking zeros pattern (each bit position gets a 0)
+  task write_walking_zeros_pattern(int pkt_length);
+    `uvm_info(get_type_name(), $sformatf("Writing walking zeros pattern: length=%0d", pkt_length), UVM_MEDIUM)
+
+    if (pkt_length <= 0) begin
+      `uvm_error(get_type_name(), "Packet length must be >= 1")
+      return;
+    end
+
+    for (int i = 0; i < pkt_length; i++) begin
+      bit is_sop = (i == 0);
+      bit is_eop = (i == pkt_length-1);
+      string tr_name = is_sop ? "tr_walk0_sop" : (is_eop ? "tr_walk0_eop" : $sformatf("tr_walk0_data_%0d", i));
+
+      tr = pkt_proc_seq_item::type_id::create(tr_name);
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
+      tr.empty_de_assert = 1'b0;
+      tr.enq_req = 1'b1;
+      tr.deq_req = 1'b0;
+      tr.in_sop = is_sop;
+      tr.in_eop = is_eop;
+      // Walking zeros: 0xFFFFFFFE, 0xFFFFFFFD, 0xFFFFFFFB, 0xFFFFFFF7, etc.
+      tr.wr_data_i = ~(32'h1 << (i % 32));
+      tr.pck_len_valid = is_sop;
+      tr.pck_len_i = pkt_length[11:0];
+      tr.pck_proc_almost_full_value = almost_full_value;
+      tr.pck_proc_almost_empty_value = almost_empty_value;
+      finish_item(tr);
+    end
+  endtask
+
+  // Helper task to write random data with high bit toggle probability
+  task write_random_data_with_coverage(int pkt_length);
+    `uvm_info(get_type_name(), $sformatf("Writing random data with coverage: length=%0d", pkt_length), UVM_MEDIUM)
+
+    if (pkt_length <= 0) begin
+      `uvm_error(get_type_name(), "Packet length must be >= 1")
+      return;
+    end
+
+    for (int i = 0; i < pkt_length; i++) begin
+      bit is_sop = (i == 0);
+      bit is_eop = (i == pkt_length-1);
+      string tr_name = is_sop ? "tr_random_sop" : (is_eop ? "tr_random_eop" : $sformatf("tr_random_data_%0d", i));
+
+      tr = pkt_proc_seq_item::type_id::create(tr_name);
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
+      tr.empty_de_assert = 1'b0;
+      tr.enq_req = 1'b1;
+      tr.deq_req = 1'b0;
+      tr.in_sop = is_sop;
+      tr.in_eop = is_eop;
+      
+      // Generate random data with high bit toggle probability
+      // Use different random seeds for each word to maximize bit coverage
+      bit [31:0] random_data;
+      std::randomize(random_data) with {
+        // Ensure high probability of bit toggles
+        random_data dist {
+          32'h00000000 :/ 1,    // All zeros
+          32'hFFFFFFFF :/ 1,    // All ones
+          32'h55555555 :/ 1,    // Alternating 01
+          32'hAAAAAAAA :/ 1,    // Alternating 10
+          32'h33333333 :/ 1,    // Checkerboard 0011
+          32'hCCCCCCCC :/ 1,    // Checkerboard 1100
+          32'h0F0F0F0F :/ 1,   // Nibble pattern 00001111
+          32'hF0F0F0F0 :/ 1,   // Nibble pattern 11110000
+          32'h00FF00FF :/ 1,   // Byte pattern 0000000011111111
+          32'hFF00FF00 :/ 1,   // Byte pattern 1111111100000000
+          [32'h00000001:32'h7FFFFFFF] :/ 10,  // Random positive values
+          [32'h80000000:32'hFFFFFFFE] :/ 10   // Random negative values
+        };
+      };
+      
+      tr.wr_data_i = random_data;
+      tr.pck_len_valid = is_sop;
+      tr.pck_len_i = pkt_length[11:0];
+      tr.pck_proc_almost_full_value = almost_full_value;
+      tr.pck_proc_almost_empty_value = almost_empty_value;
+      finish_item(tr);
+    end
+  endtask
+
   // Random scenario with proper constraints
   task random_scenario();
     initialize_dut();
@@ -284,13 +438,41 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     end
   endtask
 
-  // Read-only scenario
+  // Read-only scenario with comprehensive write data coverage
   task read_only_scenario();
-    //initialize_dut();
+    initialize_dut();
     
-    `uvm_info(get_type_name(), $sformatf("Starting read-only scenario with %0d reads", num_transactions), UVM_LOW)
+    `uvm_info(get_type_name(), $sformatf("Starting read-only scenario with %0d reads and comprehensive write data coverage", num_transactions), UVM_LOW)
     
+    // Phase 1: Write comprehensive data patterns to toggle all 32 bits
+    `uvm_info(get_type_name(), "Phase 1: Writing comprehensive data patterns to toggle all 32 bits", UVM_LOW)
+    
+    // Pattern 1: All zeros to all ones (0x00000000 to 0xFFFFFFFF)
+    write_packet_with_pattern(8, 32'h00000000, 32'hFFFFFFFF);
+    
+    // Pattern 2: Alternating bits (0x55555555, 0xAAAAAAAA)
+    write_packet_with_pattern(4, 32'h55555555, 32'hAAAAAAAA);
+    
+    // Pattern 3: Walking ones (0x00000001, 0x00000002, 0x00000004, etc.)
+    write_walking_ones_pattern(32);
+    
+    // Pattern 4: Walking zeros (0xFFFFFFFE, 0xFFFFFFFD, 0xFFFFFFFB, etc.)
+    write_walking_zeros_pattern(32);
+    
+    // Pattern 5: Checkerboard pattern (0x33333333, 0xCCCCCCCC)
+    write_packet_with_pattern(4, 32'h33333333, 32'hCCCCCCCC);
+    
+    // Pattern 6: Random data with high bit toggle probability
+    write_random_data_with_coverage(16);
+    
+    // Add idle cycles to ensure writes complete
+    send_idle_transaction(5);
+    
+    // Phase 2: Perform read operations
+    `uvm_info(get_type_name(), "Phase 2: Performing read operations", UVM_LOW)
     read_data(num_transactions);
+    
+    `uvm_info(get_type_name(), "Read-only scenario with comprehensive write data coverage completed", UVM_LOW)
   endtask
 
   // Concurrent read/write scenario - Technically correct implementation
@@ -322,21 +504,49 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     `uvm_info(get_type_name(), $sformatf("Concurrent R/W scenario completed with %0d packets", packet_id), UVM_LOW)
   endtask
 
-  // Packet write scenario with structured packets
+  // Packet write scenario with structured packets and comprehensive data coverage
   task packet_write_scenario();
     initialize_dut();
     
-    `uvm_info(get_type_name(), $sformatf("Starting packet write scenario: %0d packets", packet_count), UVM_LOW)
+    `uvm_info(get_type_name(), $sformatf("Starting packet write scenario: %0d packets with comprehensive data coverage", packet_count), UVM_LOW)
     
+    // Phase 1: Write initial packet with comprehensive data pattern
+    `uvm_info(get_type_name(), "Phase 1: Writing initial packet with comprehensive data pattern", UVM_LOW)
+    write_packet_with_pattern(50, 32'h00000000, 32'hFFFFFFFF);
+    
+    // Phase 2: Write packets with enhanced data coverage
+    `uvm_info(get_type_name(), "Phase 2: Writing packets with enhanced data coverage", UVM_LOW)
     for (int pkt = 0; pkt < packet_count; pkt++) begin
       current_packet_length = $urandom_range(min_packet_length, max_packet_length);
       `uvm_info(get_type_name(), $sformatf("Writing packet %0d with length %0d", pkt, current_packet_length), UVM_LOW)
       
-      write_packet(current_packet_length, 32'hC000 + (pkt << 8));
+      // Use different data patterns for each packet to maximize bit coverage
+      case (pkt % 6)
+        0: write_packet_with_pattern(current_packet_length, 32'h00000000, 32'hFFFFFFFF); // Full range
+        1: write_packet_with_pattern(current_packet_length, 32'h55555555, 32'hAAAAAAAA); // Alternating
+        2: write_packet_with_pattern(current_packet_length, 32'h33333333, 32'hCCCCCCCC); // Checkerboard
+        3: write_packet_with_pattern(current_packet_length, 32'h0F0F0F0F, 32'hF0F0F0F0); // Nibble pattern
+        4: write_packet_with_pattern(current_packet_length, 32'h00FF00FF, 32'hFF00FF00); // Byte pattern
+        5: write_packet_with_pattern(current_packet_length, 32'h0000FFFF, 32'hFFFF0000); // Half-word pattern
+      endcase
       
       // Add idle cycles between packets
       send_idle_transaction($urandom_range(1, 3));
     end
+    
+    // Phase 3: Write special patterns for maximum bit coverage
+    `uvm_info(get_type_name(), "Phase 3: Writing special patterns for maximum bit coverage", UVM_LOW)
+    
+    // Walking ones pattern
+    write_walking_ones_pattern(32);
+    
+    // Walking zeros pattern  
+    write_walking_zeros_pattern(32);
+    
+    // Random data with high bit toggle probability
+    write_random_data_with_coverage(20);
+    
+    `uvm_info(get_type_name(), "Packet write scenario with comprehensive data coverage completed", UVM_LOW)
   endtask
 
   // Continuous read scenario
@@ -414,12 +624,12 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     `uvm_info(get_type_name(), $sformatf("Starting underflow scenario"), UVM_LOW)
     // Write some packets to fill the buffer
-      write_packet(10, 32'hC000);
+      write_packet(12000, 32'hC000);
       send_idle_transaction(10);
     
     // Try to read more than the buffer can hold
     // Try to read from empty buffer
-    read_data(12);
+    read_data(12100);
   endtask
 
   // Async reset scenario with write/read level verification
@@ -593,6 +803,52 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Try to complete the packet (should be dropped)
     write_packet(6, 32'hF700);
+
+   // Write a few data words
+    for (int i = 1; i < 4; i++) begin
+      tr = pkt_proc_seq_item::type_id::create($sformatf("tr_data_%0d", i));
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = 1'b0;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
+      tr.empty_de_assert = 1'b0;
+      tr.enq_req = 1'b1;
+      tr.deq_req = 1'b0;
+      tr.in_sop = 1'b0;
+      tr.in_eop = 1'b0;
+      tr.wr_data_i = 32'hF600 + i;
+      tr.pck_len_valid = 1'b0;
+      tr.pck_len_i = current_packet_length[11:0];
+      tr.pck_proc_almost_full_value = 5'd28;
+      tr.pck_proc_almost_empty_value = 5'd4;
+      finish_item(tr);
+    end
+
+    send_idle_transaction(3);
+
+    write_packet(10, 32'hF700);
+
+// Write a few data words
+    for (int i = 1; i < 4; i++) begin
+      tr = pkt_proc_seq_item::type_id::create($sformatf("tr_data_%0d", i));
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+      tr.empty_de_assert = 1'b0;
+      tr.enq_req = 1'b1;
+      tr.deq_req = 1'b0;
+      tr.in_sop = 1'b0;
+      tr.in_eop = 1'b0;
+      tr.wr_data_i = 32'hF600 + i;
+      tr.pck_len_valid = 1'b0;
+      tr.pck_len_i = current_packet_length[11:0];
+      tr.pck_proc_almost_full_value = 5'd28;
+      tr.pck_proc_almost_empty_value = 5'd4;
+      finish_item(tr);
+    end
+
+    send_idle_transaction(3);
+
+    read_data(10);
   endtask
 
   // Reset during read scenario
@@ -679,10 +935,33 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
         end
 
         // Apply reset during packet transmission
-        send_reset_transaction(1'b1, 1'b1, 3);
-    send_reset_transaction(1'b1, 1'b0, 2);
+        send_reset_transaction(1'b0, 1'b1, 3);
+        send_reset_transaction(1'b1, 1'b0, 2);
 
-        write_packet(6, 32'hF800);
+        write_packet(50, 32'hF800);
+
+        read_data(10);
+
+           // Read data
+    repeat(4) begin
+          tr = pkt_proc_seq_item::type_id::create("tr_read");
+          start_item(tr);
+          tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+          tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
+          tr.empty_de_assert = 1'b0;
+          tr.enq_req = 1'b0;
+          tr.deq_req = 1'b1;
+          tr.in_sop = 1'b0;
+          tr.in_eop = 1'b0;
+          tr.wr_data_i = 32'h0;
+          tr.pck_len_valid = 1'b0;
+          tr.pck_len_i = 12'h0;
+          tr.pck_proc_almost_full_value = 5'd28;
+          tr.pck_proc_almost_empty_value = 5'd4;
+          finish_item(tr);
+        end
+        read_data(10);
+
   endtask
 
   // ============================================================================

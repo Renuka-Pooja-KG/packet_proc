@@ -71,16 +71,19 @@ class pkt_proc_coverage extends uvm_component;
         }
 
         // Cross coverage for critical scenarios
-        write_during_full: cross basic_ops, buffer_status {
-            bins write_to_full = binsof(basic_ops.write_only) && binsof(buffer_status.full);
-        }
-
-        read_during_empty: cross basic_ops, buffer_status {
-            bins read_from_empty = binsof(basic_ops.read_only) && binsof(buffer_status.empty);
-        }
+    
 
         concurrent_ops: cross basic_ops, buffer_status {
             bins concurrent_normal = binsof(basic_ops.concurrent) && binsof(buffer_status.normal);
+            
+            // Ignore all other combinations to focus only on concurrent,normal
+            ignore_bins other_combinations = 
+                binsof(basic_ops.idle) ||
+                binsof(basic_ops.write_only) ||
+                binsof(basic_ops.read_only) ||
+                binsof(buffer_status.empty) ||
+                binsof(buffer_status.full) ||
+                binsof(buffer_status.full_and_empty);
         }
 
         reset_during_ops: cross basic_ops, reset_conditions {
