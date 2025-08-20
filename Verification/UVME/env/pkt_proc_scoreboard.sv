@@ -1089,7 +1089,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                     no_eop = 0;
                     `uvm_info("EOP_DETECTION", $sformatf("Time=%0t: EOP detected in WRITE_DATA: ref_in_eop_r1=%0b, tr.in_eop=%0b, no_eop cleared to 0", 
                              $time, ref_in_eop_r1, tr.in_eop), UVM_LOW)
-                end else if (tr.in_sop && !ref_in_eop_r1) begin
+                end else if (~tr.in_eop || tr.in_sop && !ref_in_eop_r1) begin
                     // CRITICAL FIX: Only set no_eop=1 for new packet, do NOT set next_invalid_3
                     // This prevents duplicate packet drop detection when transitioning to WRITE_HEADER
                     no_eop = 1;
@@ -1244,7 +1244,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                                 $time, tr.in_sop, no_eop), UVM_LOW)
                     end
                     // CRITICAL: Always set no_eop=1 for new packet
-                    no_eop = 1;
+                    //no_eop = 1;
                     `uvm_info("SOP_DETECTION", $sformatf("Time=%0t: New SOP in WRITE_HEADER: no_eop set to 1", $time), UVM_LOW)
                 end else begin
                     no_eop = no_eop;
