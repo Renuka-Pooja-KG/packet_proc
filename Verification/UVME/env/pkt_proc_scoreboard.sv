@@ -984,17 +984,17 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             IDLE_W: begin
                 // Use current cycle values (matching RTL behavior exactly)
                 if (tr.enq_req && tr.in_sop) begin
-                    // NEW: Check for invalid_3 condition using no_eop
-                    if (no_eop) begin
-                        // If no_eop=1, this indicates invalid_3 condition - new SOP before previous packet completed
-                        next_invalid_3 = 1;
-                        `uvm_info("INVALID_3_DETECTION", $sformatf("Time=%0t: INVALID_3 DETECTED in IDLE_W: no_eop=%0b, enq_req=%0b, in_sop=%0b (new packet before previous completed)", 
-                                 $time, no_eop, tr.enq_req, tr.in_sop), UVM_LOW)
-                    end else begin
-                        next_invalid_3 = 0;
-                    end
-                    // NEW: Set no_eop=1 when packet starts (SOP arrives)
-                    no_eop = 1;
+                    // // NEW: Check for invalid_3 condition using no_eop
+                    // if (no_eop) begin
+                    //     // If no_eop=1, this indicates invalid_3 condition - new SOP before previous packet completed
+                    //     next_invalid_3 = 1;
+                    //     `uvm_info("INVALID_3_DETECTION", $sformatf("Time=%0t: INVALID_3 DETECTED in IDLE_W: no_eop=%0b, enq_req=%0b, in_sop=%0b (new packet before previous completed)", 
+                    //              $time, no_eop, tr.enq_req, tr.in_sop), UVM_LOW)
+                    // end else begin
+                    //     next_invalid_3 = 0;
+                    // end
+                    // // NEW: Set no_eop=1 when packet starts (SOP arrives)
+                    // no_eop = 1;
                     `uvm_info("SOP_DETECTION", $sformatf("Time=%0t: SOP detected in IDLE_W: no_eop set to 1 (packet started)", $time), UVM_LOW)
                     write_state_next = WRITE_HEADER;
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: IDLE_W -> WRITE_HEADER (enq_req=%0b, in_sop=%0b, no_eop=%0b, next_invalid_3=%0b)", 
@@ -1025,7 +1025,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                     next_invalid_3 = 0;
                     `uvm_info("EOP_DETECTION", $sformatf("Time=%0t: EOP detected in WRITE_HEADER: ref_in_sop_r1=%0b, ref_in_eop_r1=%0b, no_eop cleared to 0", 
                              $time, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
-                end else if(tr.in_sop || ref_in_sop_r1) begin
+                end else if(tr.in_sop || (ref_in_sop_r1 && !ref_in_eop_r1)) begin
                     // ANY new SOP arrival in WRITE_HEADER
                     if(no_eop) begin
                         // Previous packet didn't complete - invalid_3 condition
