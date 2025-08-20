@@ -89,6 +89,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_deq_req_prev2;  // Two cycles ago dequeue request (for out_sop timing)
     bit ref_buffer_full_prev;   // Previous cycle's buffer_full
     bit ref_buffer_empty_prev;  // Previous cycle's buffer_empty
+    bit ref_buffer_empty_prev2; // Two cycles ago buffer_empty (for underflow timing)
     
     // CRITICAL FIX: Add two-cycle delayed buffer_full for overflow detection
     // Overflow should go high AFTER one clock pulse after pck_proc_full goes high
@@ -199,6 +200,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_buffer_full_prev = 0;
         ref_buffer_empty_prev = 1;
         ref_buffer_full_prev2 = 0;  // Initialize two-cycle delayed buffer_full
+        ref_buffer_empty_prev2 = 1; // Initialize two-cycle delayed buffer_empty
         
         // Initialize write level tracking
         ref_wr_lvl_next = 0;
@@ -303,6 +305,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_buffer_empty_prev = ref_buffer_empty;
         ref_overflow_prev = ref_overflow;
         ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
+        ref_buffer_empty_prev2 = ref_buffer_empty_prev; // Two-cycle delay for underflow
 
 
         // `uvm_info("BEFORE_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
@@ -558,6 +561,12 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         if (ref_buffer_full != ref_buffer_full_prev) begin
             `uvm_info("BUFFER_FULL_TIMING", $sformatf("Time=%0t: buffer_full changed: %0b -> %0b (prev2=%0b for overflow)", 
                      $time, ref_buffer_full_prev, ref_buffer_full, ref_buffer_full_prev2), UVM_LOW)
+        end
+        
+        // Debug buffer_empty timing for underflow detection
+        if (ref_buffer_empty != ref_buffer_empty_prev) begin
+            `uvm_info("BUFFER_EMPTY_TIMING", $sformatf("Time=%0t: buffer_empty changed: %0b -> %0b (prev2=%0b for underflow)", 
+                     $time, ref_buffer_empty_prev, ref_buffer_empty, ref_buffer_empty_prev2), UVM_LOW)
         end
         
         // ============================================================================
@@ -836,6 +845,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_buffer_full_prev = 0;
             ref_buffer_empty_prev = 1;
             ref_buffer_full_prev2 = 0;  // Initialize two-cycle delayed buffer_full
+            ref_buffer_empty_prev2 = 1; // Initialize two-cycle delayed buffer_empty
             
             // Initialize write level tracking
             ref_wr_lvl_next = 0;
@@ -1491,11 +1501,11 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_proc_overflow = 0;
         end
 
-        // Underflow detection - use previous cycle's buffer_empty state
-        if (tr.deq_req && ref_buffer_empty_prev) begin
+        // Underflow detection - use two-cycle delayed buffer_empty state
+        if (tr.deq_req && ref_buffer_empty_prev2) begin
             ref_pck_proc_underflow = 1;
-            `uvm_info("UNDERFLOW_DEBUG", $sformatf("Time=%0t: Underflow detected (delayed by 1 cycle): deq_req=%0b, buffer_empty_prev=%0b", 
-                     $time, tr.deq_req, ref_buffer_empty_prev), UVM_LOW)
+            `uvm_info("UNDERFLOW_DEBUG", $sformatf("Time=%0t: Underflow detected (delayed by 2 cycles): deq_req=%0b, buffer_empty_prev2=%0b", 
+                     $time, tr.deq_req, ref_buffer_empty_prev2), UVM_LOW)
         end else begin
             ref_pck_proc_underflow = 0;
         end
