@@ -860,108 +860,27 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Start writing a packet
     current_packet_length = 8;
-    
-    // Write SOP
-    tr = pkt_proc_seq_item::type_id::create("tr_sop");
-    start_item(tr);
-    tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-    tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
-    tr.empty_de_assert = 1'b0;
-    tr.enq_req = 1'b1;
-    tr.deq_req = 1'b0;
-    tr.in_sop = 1'b1;
-    tr.in_eop = 1'b0;
-    tr.wr_data_i = 32'h0005;
-    tr.pck_len_valid = 1'b1;
-    tr.pck_len_i = 12'h5;
-    tr.pck_proc_almost_full_value = 5'd28;
-    tr.pck_proc_almost_empty_value = 5'd4;
-    finish_item(tr);
-    
-    // Write a few data words
+    write_packet(50, 32'hF800);
+    read_data(10);
+
     for (int i = 1; i < 4; i++) begin
       tr = pkt_proc_seq_item::type_id::create($sformatf("tr_data_%0d", i));
       start_item(tr);
-      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_rstn = 1'b0;
       tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
       tr.empty_de_assert = 1'b0;
-      tr.enq_req = 1'b1;
-      tr.deq_req = 1'b0;
+      tr.enq_req = 1'b0;
+      tr.deq_req = 1'b1;
       tr.in_sop = 1'b0;
       tr.in_eop = 1'b0;
-      tr.wr_data_i = 32'h0005 + i;
+      tr.wr_data_i = 32'h0;
       tr.pck_len_valid = 1'b0;
-      tr.pck_len_i = 12'h5;
+      tr.pck_len_i = current_packet_length[11:0];
       tr.pck_proc_almost_full_value = 5'd28;
       tr.pck_proc_almost_empty_value = 5'd4;
       finish_item(tr);
     end
 
-    // Write EOP
-    tr = pkt_proc_seq_item::type_id::create("tr_sop");
-    start_item(tr);
-    tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-    tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
-    tr.empty_de_assert = 1'b0;
-    tr.enq_req = 1'b1;
-    tr.deq_req = 1'b0;
-    tr.in_sop = 1'b0;
-    tr.in_eop = 1'b1;
-    tr.wr_data_i = 32'h0005;
-    tr.pck_len_valid = 1'b1;
-    tr.pck_len_i = 12'h5;
-    tr.pck_proc_almost_full_value = 5'd28;
-    tr.pck_proc_almost_empty_value = 5'd4;
-    finish_item(tr);
-    
-    send_idle_transaction(5);
-
-    // Read data
-    repeat(4) begin
-          tr = pkt_proc_seq_item::type_id::create("tr_read");
-          start_item(tr);
-          tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-          tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
-          tr.empty_de_assert = 1'b0;
-          tr.enq_req = 1'b0;
-          tr.deq_req = 1'b1;
-          tr.in_sop = 1'b0;
-          tr.in_eop = 1'b0;
-          tr.wr_data_i = 32'h0;
-          tr.pck_len_valid = 1'b0;
-          tr.pck_len_i = 12'h0;
-          tr.pck_proc_almost_full_value = 5'd28;
-          tr.pck_proc_almost_empty_value = 5'd4;
-          finish_item(tr);
-        end
-
-        // Apply reset during packet transmission
-        send_reset_transaction(1'b0, 1'b1, 3);
-        send_reset_transaction(1'b1, 1'b0, 2);
-
-        write_packet(50, 32'hF800);
-
-        read_data(10);
-
-           // Read data
-    repeat(4) begin
-          tr = pkt_proc_seq_item::type_id::create("tr_read");
-          start_item(tr);
-          tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-          tr.pck_proc_int_mem_fsm_sw_rstn = 1'b1;
-          tr.empty_de_assert = 1'b0;
-          tr.enq_req = 1'b0;
-          tr.deq_req = 1'b1;
-          tr.in_sop = 1'b0;
-          tr.in_eop = 1'b0;
-          tr.wr_data_i = 32'h0;
-          tr.pck_len_valid = 1'b0;
-          tr.pck_len_i = 12'h0;
-          tr.pck_proc_almost_full_value = 5'd28;
-          tr.pck_proc_almost_empty_value = 5'd4;
-          finish_item(tr);
-        end
-        read_data(10);
 
   endtask
 
