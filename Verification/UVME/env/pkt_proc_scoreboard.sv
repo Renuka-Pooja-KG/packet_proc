@@ -633,10 +633,16 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         read_state_prev = read_state;  // Store previous state before advancing
         write_state = write_state_next;
         read_state  = read_state_next;
-        invalid_3 = invalid_3_prev;  // FIXED: Use previous cycle's value for proper timing
+        //invalid_3 = invalid_3_prev;  // FIXED: Use previous cycle's value for proper timing
 
+        `uvm_info("BEFORE_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+            $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
         // Store current value for next cycle
         invalid_3_prev = next_invalid_3;
+        invalid_3 = invalid_3_prev; 
+
+        `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+            $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
         
         // Debug timing relationship for invalid_3
         if (next_invalid_3 != invalid_3_prev) begin
@@ -1017,6 +1023,33 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 end else begin
                     write_state_next = WRITE_DATA;  // Default case
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_DATA (advance to data)", $time), UVM_LOW)
+                end
+
+                if(ref_in_sop_r1 && ref_in_eop_r1) begin
+                    no_eop = 0;
+                    next_invalid_3 = 0;
+                    `uvm_info("EOP_DETECTION", $sformatf("Time=%0t: EOP detected in WRITE_HEADER: ref_in_sop_r1=%0b, ref_in_eop_r1=%0b, no_eop cleared to 0", 
+                             $time, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
+                end else if(tr.in_sop) begin
+                    // ANY new SOP arrival in WRITE_HEADER
+                    if(no_eop) begin
+                        // Previous packet didn't complete - invalid_3 condition
+                        next_invalid_3 = 1;
+                        `uvm_info("INVALID_3_DETECTION", $sformatf("Time=%0t: INVALID_3 detected in WRITE_HEADER: SOP=%0b, no_eop=%0b", 
+                                $time, tr.in_sop, no_eop), UVM_LOW)
+                    end else begin
+                        next_invalid_3 = 0;  // No invalid condition
+                        `uvm_info("NO_INVALID_3_DETECTION", $sformatf("Time=%0t: No INVALID_3 detected in WRITE_HEADER: SOP=%0b, no_eop=%0b", 
+                                $time, tr.in_sop, no_eop), UVM_LOW)
+                    end
+                    // CRITICAL: Always set no_eop=1 for new packet
+                    no_eop = 1;
+                    `uvm_info("SOP_DETECTION", $sformatf("Time=%0t: New SOP in WRITE_HEADER: no_eop set to 1", $time), UVM_LOW)
+                end else begin
+                    no_eop = no_eop;
+                    next_invalid_3 = next_invalid_3;
+                    `uvm_info("NO_EOP_MAINTAIN", $sformatf("Time=%0t: Maintaining no_eop=%0b, next_invalid_3=%0b in WRITE_HEADER", 
+                             $time, no_eop, next_invalid_3), UVM_LOW)
                 end
             end
             
