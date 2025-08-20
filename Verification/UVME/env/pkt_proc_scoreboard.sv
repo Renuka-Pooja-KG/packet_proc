@@ -303,6 +303,17 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_buffer_empty_prev = ref_buffer_empty;
         ref_overflow_prev = ref_overflow;
         ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
+
+
+        `uvm_info("BEFORE_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+            $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
+        // Store current value for next cycle
+        // invalid_3_prev = next_invalid_3;
+        // invalid_3 = invalid_3_prev; 
+
+        invalid_3 = next_invalid_3;
+        `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+            $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
         
         // ============================================================================
         // PHASE 2: Update buffer states FIRST (before packet drop logic)
@@ -635,15 +646,15 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         read_state  = read_state_next;
         //invalid_3 = invalid_3_prev;  // FIXED: Use previous cycle's value for proper timing
 
-        `uvm_info("BEFORE_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
-            $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
-        // Store current value for next cycle
-        // invalid_3_prev = next_invalid_3;
-        // invalid_3 = invalid_3_prev; 
+        // `uvm_info("BEFORE_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+        //     $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
+        // // Store current value for next cycle
+        // // invalid_3_prev = next_invalid_3;
+        // // invalid_3 = invalid_3_prev; 
 
-        invalid_3 = next_invalid_3;
-        `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
-            $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
+        // invalid_3 = next_invalid_3;
+        // `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+        //     $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
         
         // Debug timing relationship for invalid_3
         if (next_invalid_3 != invalid_3_prev) begin
