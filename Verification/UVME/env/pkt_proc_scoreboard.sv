@@ -508,25 +508,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_invalid3_first_word_handled = 1;
         end
         
-        // CRITICAL FIX: Handle case where packet drop occurred in previous cycle and we need to write first word
-        // This catches the scenario where invalid_3 was detected in previous cycle but first word needs to be written now
-        // if (!ref_packet_drop && ref_packet_drop_prev && invalid_3 && tr.in_sop && tr.enq_req && !ref_invalid3_first_word_handled) begin
-        //     // Packet drop just ended, new packet starting
-        //     // Write the first word to the current wr_ptr location (which was adjusted in previous cycle)
-        //     ref_buffer[ref_wr_ptr[13:0]] = tr.wr_data_i;  // Write current cycle's data
-            
-        //     `uvm_info("INVALID_3_FIX_DEBUG", $sformatf("Time=%0t: INVALID_3 FIX: Writing first word 0x%0h to buffer[%0d] after packet drop transition", 
-        //              $time, tr.wr_data_i, ref_wr_ptr), UVM_LOW)
-            
-        //     // Increment wr_ptr for subsequent writes
-        //     ref_wr_ptr_next = ref_wr_ptr + 1;
-            
-        //     `uvm_info("INVALID_3_FIX_DEBUG", $sformatf("Time=%0t: INVALID_3 FIX: wr_ptr_next incremented to %0d for subsequent writes", 
-        //              $time, ref_wr_ptr_next), UVM_LOW)
-            
-        //     // Mark that we've handled the first word
-        //     ref_invalid3_first_word_handled = 1;
-        // end
+        // CRITICAL FIX: Reset next_invalid_3 and no_eop after packet drop occurs
+        // This prevents invalid_3 from staying high indefinitely after packet drop
+        if (ref_packet_drop) begin
+            // Reset invalid_3 flags after packet drop
+            next_invalid_3 = 0;
+            no_eop = 0;
+            `uvm_info("INVALID_3_RESET", $sformatf("Time=%0t: Packet drop detected - resetting next_invalid_3=0, no_eop=0", $time), UVM_LOW)
+        end
         
         // Read operations using CURRENT pipeline register values (matching RTL exactly)
         // RTL uses deq_req_r (current pipeline register value) to generate rd_en, so scoreboard must do the same
@@ -815,6 +804,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             invalid_6 = 0;
             any_invalid_condition = 0;
             ref_overflow = 0;
+            ref_overflow_prev = 0;
             
             // Reset outputs
             ref_out_sop = 0;
@@ -837,6 +827,16 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_buffer_empty_r = 1;
             ref_wr_en = 0;
             ref_rd_en = 0;
+            ref_wr_en_prev = 0;
+            ref_rd_en_prev = 0;
+            ref_deq_req_prev = 0;
+            //ref_rd_data_delayed = 0;
+            ref_deq_req_prev2 = 0;
+            ref_buffer_full_prev = 0;
+            ref_buffer_empty_prev = 1;
+            ref_buffer_full_prev2 = 0;  // Initialize two-cycle delayed buffer_full
+            
+            // Initialize write level tracking
             ref_wr_lvl_next = 0;
             
             return; // Exit early - no further processing during reset
@@ -993,6 +993,14 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // - WRITE_DATA state only manages no_eop flag, actual invalid_3 detection happens in WRITE_HEADER
         unique case (write_state)
             IDLE_W: begin
+                // CRITICAL FIX: Reset invalid_3 flags when entering IDLE_W after packet drop
+                // This ensures clean state for next packet processing
+                if (ref_packet_drop_prev) begin
+                    next_invalid_3 = 0;
+                    no_eop = 0;
+                    `uvm_info("IDLE_W_RESET", $sformatf("Time=%0t: Entering IDLE_W after packet drop - resetting next_invalid_3=0, no_eop=0", $time), UVM_LOW)
+                end
+                
                 // Use current cycle values (matching RTL behavior exactly)
                 if (tr.enq_req && tr.in_sop) begin
                     // // NEW: Check for invalid_3 condition using no_eop
@@ -1261,7 +1269,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // invalid_3 = invalid_3_prev; 
 
         invalid_3 = next_invalid_3;
-        `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+        `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3= %0d",
             $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
 
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_4
