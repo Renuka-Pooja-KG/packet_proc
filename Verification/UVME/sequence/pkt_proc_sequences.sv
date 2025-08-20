@@ -30,7 +30,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   // Packet configuration
   int packet_count = 5;
   int min_packet_length = 4;
-  int max_packet_length = 16;
+  int max_packet_length = 4000;
   int current_packet_length;
   int current_packet_word_count;
   
@@ -402,6 +402,10 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     send_idle_transaction(5);  // Wait for overflow processing
     
     `uvm_info(get_type_name(), "Overflow scenario completed - First overflow occurred", UVM_LOW)
+
+    write_packet(10, 32'h1234);
+    read_data(10);
+    send_idle_transaction(5);
   endtask
 
   // Underflow scenario - try to read from empty buffer
@@ -798,7 +802,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     // });
     // finish_item(tr);
 
-    send_idle_transaction(3);
+    //send_idle_transaction(3);
 
     write_packet(5, 32'hB006);
     

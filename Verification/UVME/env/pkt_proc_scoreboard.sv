@@ -56,6 +56,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     bit ref_packet_drop_prev;  // track rising edge of packet_drop for debug
     bit ref_in_packet;  // CRITICAL: RTL's in_packet signal for invalid_3 detection
     bit ref_invalid3_first_word_handled;  // CRITICAL: Track if first word after invalid_3 was handled
+    bit no_eop;                           // NEW: Tracks if current packet has no EOP (packet in progress)
+    bit next_invalid_3;                   // NEW: Next cycle's invalid_3 value
+    bit invalid_3_prev;                   // NEW: Previous cycle's next_invalid_3 value for proper timing
     bit invalid_1, invalid_3, invalid_4, invalid_5, invalid_6, any_invalid_condition; // packet drop conditions
     
     // Expected outputs
@@ -157,6 +160,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_packet_drop_prev = 0;
         ref_in_packet = 0;  // CRITICAL: Initialize in_packet to 0
         ref_invalid3_first_word_handled = 0;  // CRITICAL: Initialize invalid3 first word handled flag
+        no_eop = 0;                           // NEW: Initialize no_eop to 0
+        next_invalid_3 = 0;                   // NEW: Initialize next_invalid_3 to 0
+        invalid_3_prev = 0;                   // NEW: Initialize invalid_3_prev to 0
         invalid_1 = 0;
         invalid_3 = 0;
         invalid_4 = 0;
@@ -627,7 +633,17 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         read_state_prev = read_state;  // Store previous state before advancing
         write_state = write_state_next;
         read_state  = read_state_next;
+        invalid_3 = invalid_3_prev;  // FIXED: Use previous cycle's value for proper timing
+
+        // Store current value for next cycle
+        invalid_3_prev = next_invalid_3;
         
+        // Debug timing relationship for invalid_3
+        if (next_invalid_3 != invalid_3_prev) begin
+            `uvm_info("INVALID_3_TIMING", $sformatf("Time=%0t: INVALID_3 timing: next_invalid_3=%0b -> invalid_3_prev=%0b, invalid_3=%0b (1-cycle delayed)", 
+                     $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
+        end
+
         // ============================================================================
         // PHASE 13: Update pipeline registers (simultaneous update matching RTL <=)
         // ============================================================================
@@ -771,6 +787,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_proc_underflow = 0;
             ref_packet_drop = 0;
             ref_packet_drop_prev = 0;
+            no_eop = 0;                           // NEW: Reset no_eop
+            next_invalid_3 = 0;                   // NEW: Reset next_invalid_3
+            invalid_3_prev = 0;                   // NEW: Reset invalid_3_prev
             invalid_1 = 0;
             invalid_3 = 0;
             invalid_4 = 0;
@@ -851,6 +870,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_pck_proc_underflow = 0;
             ref_packet_drop = 0;
             ref_packet_drop_prev = 0;
+            no_eop = 0;                           // NEW: Reset no_eop
+            next_invalid_3 = 0;                   // NEW: Reset next_invalid_3
+            invalid_3_prev = 0;                   // NEW: Reset invalid_3_prev
             invalid_1 = 0;
             invalid_3 = 0;
             invalid_4 = 0;
@@ -945,13 +967,29 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void compute_write_next_state(pkt_proc_seq_item tr);
+        // ENHANCED: Consolidated EOP detection and improved state transitions for invalid_3 handling
+        // - Uses no_eop and next_invalid_3 variables for systematic packet drop detection
+        // - Consolidated EOP detection logic eliminates duplicate code
+        // - Proper state transitions handle invalid_3 conditions in all states
         unique case (write_state)
             IDLE_W: begin
                 // Use current cycle values (matching RTL behavior exactly)
                 if (tr.enq_req && tr.in_sop) begin
+                    // NEW: Check for invalid_3 condition using no_eop
+                    if (no_eop) begin
+                        // If no_eop=1, this indicates invalid_3 condition - new SOP before previous packet completed
+                        next_invalid_3 = 1;
+                        `uvm_info("INVALID_3_DETECTION", $sformatf("Time=%0t: INVALID_3 DETECTED in IDLE_W: no_eop=%0b, enq_req=%0b, in_sop=%0b (new packet before previous completed)", 
+                                 $time, no_eop, tr.enq_req, tr.in_sop), UVM_LOW)
+                    end else begin
+                        next_invalid_3 = 0;
+                    end
+                    // NEW: Set no_eop=1 when packet starts (SOP arrives)
+                    no_eop = 1;
+                    `uvm_info("SOP_DETECTION", $sformatf("Time=%0t: SOP detected in IDLE_W: no_eop set to 1 (packet started)", $time), UVM_LOW)
                     write_state_next = WRITE_HEADER;
-                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: IDLE_W -> WRITE_HEADER (enq_req=%0b, in_sop=%0b)", 
-                             $time, tr.enq_req, tr.in_sop), UVM_LOW)
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: IDLE_W -> WRITE_HEADER (enq_req=%0b, in_sop=%0b, no_eop=%0b, next_invalid_3=%0b)", 
+                             $time, tr.enq_req, tr.in_sop, no_eop, next_invalid_3), UVM_LOW)   
                 end else begin
                     write_state_next = IDLE_W;
                 end
@@ -964,9 +1002,18 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> IDLE_W (in_sop_r1=%0b && in_eop_r1=%0b)", 
                              $time, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
                 end else if (tr.in_sop) begin
+                    // NEW: Check if SOP arrives while packet is in progress
+                    if (no_eop) begin
+                        // If no_eop=1, this indicates invalid_3 condition
+                        next_invalid_3 = 1;
+                        `uvm_info("INVALID_3_DETECTION", $sformatf("Time=%0t: INVALID_3 DETECTED in WRITE_HEADER: no_eop=%0b, in_sop=%0b (new packet before previous completed)", 
+                                 $time, no_eop, tr.in_sop), UVM_LOW)
+                    end else begin
+                        next_invalid_3 = 0;
+                    end
                     write_state_next = WRITE_HEADER;  // Current SOP
-                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_HEADER (in_sop=%0b)", 
-                             $time, tr.in_sop), UVM_LOW)
+                    `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_HEADER (in_sop=%0b, no_eop=%0b, next_invalid_3=%0b)", 
+                             $time, tr.in_sop, no_eop, next_invalid_3), UVM_LOW)       
                 end else begin
                     write_state_next = WRITE_DATA;  // Default case
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_DATA (advance to data)", $time), UVM_LOW)
@@ -996,6 +1043,24 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                              $time, ref_in_eop_r1, tr.in_sop, tr.enq_req), UVM_LOW)
                 end else begin
                     write_state_next = WRITE_DATA;
+                end
+
+                // NEW: Consolidated EOP detection and no_eop management for WRITE_DATA state
+                if (ref_in_eop_r1 || tr.in_eop) begin
+                    no_eop = 0;
+                    next_invalid_3 = 0;
+                    `uvm_info("EOP_DETECTION", $sformatf("Time=%0t: EOP detected in WRITE_DATA: ref_in_eop_r1=%0b, tr.in_eop=%0b, no_eop cleared to 0", 
+                             $time, ref_in_eop_r1, tr.in_eop), UVM_LOW)
+                end else if (tr.in_sop && !ref_in_eop_r1) begin
+                    no_eop = 1;
+                    next_invalid_3 = 1;
+                    `uvm_info("INVALID_3_DETECTION", $sformatf("Time=%0t: INVALID_3 detected in WRITE_DATA: SOP=%0b, no_eop set to 1, next_invalid_3=1", 
+                             $time, tr.in_sop), UVM_LOW)
+                end else begin
+                    no_eop = no_eop;
+                    next_invalid_3 = next_invalid_3;  // Maintain current value
+                    `uvm_info("NO_EOP_MAINTAIN", $sformatf("Time=%0t: Maintaining no_eop=%0b, next_invalid_3=%0b in WRITE_DATA", 
+                             $time, no_eop, next_invalid_3), UVM_LOW)
                 end
             end
             
@@ -1119,7 +1184,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         
         // CRITICAL FIX: Match RTL's invalid_3 logic exactly
         // RTL: invalid_3 = (in_sop_r1 && in_packet) - "Back to back SOP without getting EOP"
-        invalid_3 = (ref_in_sop_r1 && ref_in_packet);
+        // NEW: invalid_3 is now calculated in compute_write_next_state using no_eop and next_invalid_3
+        // invalid_3 = (ref_in_sop_r1 && ref_in_packet);  // OLD LOGIC - REMOVED
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_4
         // invalid_4 = (count_w < (pck_len_r2 - 1)) && (pck_len_r2 != 0) && (in_eop_r1)
         invalid_4 = (write_state == WRITE_DATA) && 
@@ -1132,7 +1198,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // This ensures pck_invalid is detected in the same cycle as the DUT, without circular dependency
         // invalid_6 = (enq_req && buffer_full) - immediate overflow detection
         // NOTE: Use current cycle buffer_full for immediate detection, not delayed version
-        invalid_6 = (tr.enq_req && ref_buffer_full);
+        //invalid_6 = (tr.enq_req && ref_buffer_full);
+        invalid_6 = (ref_overflow);
 
         // CRITICAL FIX: Track invalid conditions across cycles to match DUT behavior
         // The DUT's pck_invalid requires both invalid condition AND enq_req, but the timing might be different
@@ -1140,8 +1207,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         any_invalid_condition = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6);
         
         // Debug: Show condition calculations that use ref_packet_length_w
-        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (ref_in_sop_r1=%0b && ~ref_in_eop_r1=%0b && state=%0d), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && ref_in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
-                 $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, ref_in_sop_r1, ref_in_eop_r1, write_state, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
+        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (no_eop=%0b, next_invalid_3=%0b), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && ref_in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
+                 $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, no_eop, next_invalid_3, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_overflow), UVM_LOW)
 
         // CRITICAL FIX: RTL emulation - Use DUT's packet_drop signal directly (matching RTL exactly)
         // RTL generates packet_drop as a combinational output based on pck_invalid logic
@@ -1160,8 +1227,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
 
                 // Additional debug for invalid_3 specifically
                 if (invalid_3) begin
-                    `uvm_info("INVALID_3_DEBUG", $sformatf("Time=%0t: INVALID_3 triggered: in_sop_r1=%0b && in_packet=%0b (RTL logic)", 
-                             $time, ref_in_sop_r1, ref_in_packet), UVM_LOW)
+                    `uvm_info("INVALID_3_DEBUG", $sformatf("Time=%0t: INVALID_3 triggered: no_eop=%0b, next_invalid_3=%0b (NEW no_eop logic)", 
+                             $time, no_eop, next_invalid_3), UVM_LOW)
                 end
                 
                 // Additional debug for invalid_4 specifically
