@@ -404,7 +404,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     `uvm_info(get_type_name(), "Overflow scenario completed - First overflow occurred", UVM_LOW)
 
     write_packet(10, 32'h1234);
-    read_data(10);
+    read_data(4000);
     send_idle_transaction(5);
   endtask
 

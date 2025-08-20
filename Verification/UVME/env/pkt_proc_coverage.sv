@@ -42,7 +42,7 @@ class pkt_proc_coverage extends uvm_component;
             bins empty = {2'b01};
             bins normal = {2'b00};
             bins full = {2'b10};
-            bins full_and_empty = {2'b11};  // Should not occur
+            //bins full_and_empty = {2'b11};  // Should not occur
         }
 
         // Error condition coverage

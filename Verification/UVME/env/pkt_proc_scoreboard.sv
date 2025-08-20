@@ -508,14 +508,6 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_invalid3_first_word_handled = 1;
         end
         
-        // CRITICAL FIX: Reset next_invalid_3 and no_eop after packet drop occurs
-        // This prevents invalid_3 from staying high indefinitely after packet drop
-        if (ref_packet_drop) begin
-            // Reset invalid_3 flags after packet drop
-            next_invalid_3 = 0;
-            no_eop = 0;
-            `uvm_info("INVALID_3_RESET", $sformatf("Time=%0t: Packet drop detected - resetting next_invalid_3=0, no_eop=0", $time), UVM_LOW)
-        end
         
         // Read operations using CURRENT pipeline register values (matching RTL exactly)
         // RTL uses deq_req_r (current pipeline register value) to generate rd_en, so scoreboard must do the same
@@ -746,6 +738,15 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         if (ref_wr_lvl_next != ref_wr_lvl) begin
             `uvm_info("WR_LVL_CHANGE", $sformatf("Time=%0t: WR_LVL CHANGE DETECTED: %0d -> %0d (wr_en=%0b, rd_en=%0b, packet_drop=%0b)", 
                      $time, ref_wr_lvl, ref_wr_lvl_next, ref_wr_en, ref_rd_en, ref_packet_drop), UVM_LOW)
+        end
+
+        // CRITICAL FIX: Reset next_invalid_3 and no_eop after packet drop occurs
+        // This prevents invalid_3 from staying high indefinitely after packet drop
+        if (ref_packet_drop) begin
+            // Reset invalid_3 flags after packet drop
+            next_invalid_3 = 0;
+            no_eop = 0;
+            `uvm_info("INVALID_3_RESET", $sformatf("Time=%0t: Packet drop detected - resetting next_invalid_3=0, no_eop=0", $time), UVM_LOW)
         end
         
         // CRITICAL FIX: ref_wr_lvl is NOT updated here - it's updated in write() after comparison
@@ -1285,7 +1286,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // invalid_6 = (enq_req && buffer_full) - immediate overflow detection
         // NOTE: Use current cycle buffer_full for immediate detection, not delayed version
         //invalid_6 = (tr.enq_req && ref_buffer_full);
-        invalid_6 = (ref_overflow);
+        invalid_6 = (ref_pck_proc_overflow);
 
         // CRITICAL FIX: Track invalid conditions across cycles to match DUT behavior
         // The DUT's pck_invalid requires both invalid condition AND enq_req, but the timing might be different
@@ -1293,8 +1294,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         any_invalid_condition = (invalid_1 || invalid_3 || invalid_4 || invalid_5 || invalid_6);
         
         // Debug: Show condition calculations that use ref_packet_length_w
-        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (no_eop=%0b, next_invalid_3=%0b), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && ref_in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (overflow=%0b)", 
-                 $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, no_eop, next_invalid_3, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_overflow), UVM_LOW)
+        `uvm_info("PACKET_LENGTH_DEBUG", $sformatf("Time=%0t: Condition calculations - invalid_1=%0b (in_sop_r1=%0b && in_eop_r1=%0b), invalid_3=%0b (no_eop=%0b, next_invalid_3=%0b), invalid_4=%0b (count_w=%0d < pck_len_w-1=%0d && pck_len_w!=0=%0b && ref_in_eop_r1=%0b), invalid_5=%0b (count_w=%0d == pck_len_w-1=%0d || pck_len_w==0=%0b && ~in_eop_r1=%0b && state=%0d), invalid_6=%0b (pck_proc_overflow=%0b)", 
+                 $time, invalid_1, ref_in_sop_r1, ref_in_eop_r1, invalid_3, no_eop, next_invalid_3, invalid_4, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w != 0), ref_in_eop_r1, invalid_5, ref_count_w, ref_packet_length_w-1, (ref_packet_length_w == 0), ref_in_eop_r1, write_state, invalid_6, ref_pck_proc_overflow), UVM_LOW)
 
         // CRITICAL FIX: RTL emulation - Use DUT's packet_drop signal directly (matching RTL exactly)
         // RTL generates packet_drop as a combinational output based on pck_invalid logic
