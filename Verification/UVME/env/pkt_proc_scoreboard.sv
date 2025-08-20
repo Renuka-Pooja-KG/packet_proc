@@ -305,15 +305,15 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         ref_buffer_full_prev2 = ref_buffer_full_prev;  // Two-cycle delay for overflow
 
 
-        `uvm_info("BEFORE_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
-            $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
-        // Store current value for next cycle
-        // invalid_3_prev = next_invalid_3;
-        // invalid_3 = invalid_3_prev; 
+        // `uvm_info("BEFORE_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+        //     $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
+        // // Store current value for next cycle
+        // // invalid_3_prev = next_invalid_3;
+        // // invalid_3 = invalid_3_prev; 
 
-        invalid_3 = next_invalid_3;
-        `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
-            $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
+        // invalid_3 = next_invalid_3;
+        // `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+        //     $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
         
         // ============================================================================
         // PHASE 2: Update buffer states FIRST (before packet drop logic)
@@ -1089,7 +1089,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                     no_eop = 0;
                     `uvm_info("EOP_DETECTION", $sformatf("Time=%0t: EOP detected in WRITE_DATA: ref_in_eop_r1=%0b, tr.in_eop=%0b, no_eop cleared to 0", 
                              $time, ref_in_eop_r1, tr.in_eop), UVM_LOW)
-                end else if (~tr.in_eop || tr.in_sop && !ref_in_eop_r1) begin
+                end else if (~tr.in_eop || !ref_in_eop_r1 || (tr.in_sop && !ref_in_eop_r1)) begin
                     // CRITICAL FIX: Only set no_eop=1 for new packet, do NOT set next_invalid_3
                     // This prevents duplicate packet drop detection when transitioning to WRITE_HEADER
                     no_eop = 1;
@@ -1253,6 +1253,16 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                              $time, no_eop, next_invalid_3), UVM_LOW)
                 end
         end
+
+           `uvm_info("BEFORE_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+            $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
+        // Store current value for next cycle
+        // invalid_3_prev = next_invalid_3;
+        // invalid_3 = invalid_3_prev; 
+
+        invalid_3 = next_invalid_3;
+        `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
+            $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
 
         // CRITICAL FIX: RTL uses current count_w but registered in_eop_r1 for invalid_4
         // invalid_4 = (count_w < (pck_len_r2 - 1)) && (pck_len_r2 != 0) && (in_eop_r1)
