@@ -640,6 +640,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Store current value for next cycle
         // invalid_3_prev = next_invalid_3;
         // invalid_3 = invalid_3_prev; 
+
         invalid_3 = next_invalid_3;
         `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
             $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
@@ -1011,14 +1012,6 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                              $time, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
                 end else if (tr.in_sop) begin
                     // NEW: Check if SOP arrives while packet is in progress
-                    if (no_eop) begin
-                        // If no_eop=1, this indicates invalid_3 condition
-                        next_invalid_3 = 1;
-                        `uvm_info("INVALID_3_DETECTION", $sformatf("Time=%0t: INVALID_3 DETECTED in WRITE_HEADER: no_eop=%0b, in_sop=%0b (new packet before previous completed)", 
-                                 $time, no_eop, tr.in_sop), UVM_LOW)
-                    end else begin
-                        next_invalid_3 = 0;
-                    end
                     write_state_next = WRITE_HEADER;  // Current SOP
                     `uvm_info("STATE_TRANSITION", $sformatf("Time=%0t: WRITE FSM: WRITE_HEADER -> WRITE_HEADER (in_sop=%0b, no_eop=%0b, next_invalid_3=%0b)", 
                              $time, tr.in_sop, no_eop, next_invalid_3), UVM_LOW)       
@@ -1032,7 +1025,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                     next_invalid_3 = 0;
                     `uvm_info("EOP_DETECTION", $sformatf("Time=%0t: EOP detected in WRITE_HEADER: ref_in_sop_r1=%0b, ref_in_eop_r1=%0b, no_eop cleared to 0", 
                              $time, ref_in_sop_r1, ref_in_eop_r1), UVM_LOW)
-                end else if(tr.in_sop) begin
+                end else if(tr.in_sop || ref_in_sop_r1) begin
                     // ANY new SOP arrival in WRITE_HEADER
                     if(no_eop) begin
                         // Previous packet didn't complete - invalid_3 condition
