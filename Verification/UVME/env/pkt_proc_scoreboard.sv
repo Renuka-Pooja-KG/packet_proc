@@ -638,9 +638,9 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         `uvm_info("BEFORE_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
             $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
         // Store current value for next cycle
-        invalid_3_prev = next_invalid_3;
-        invalid_3 = invalid_3_prev; 
-
+        // invalid_3_prev = next_invalid_3;
+        // invalid_3 = invalid_3_prev; 
+        invalid_3 = next_invalid_3;
         `uvm_info("AFTER_INVALID_3_PRINT", $sformatf("Time = %0t: next_invalid_3= %0d, invalid_3_prev = %0d, invalid_3 = %0d",
             $time, next_invalid_3, invalid_3_prev, invalid_3), UVM_LOW)
         
@@ -977,6 +977,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // - Uses no_eop and next_invalid_3 variables for systematic packet drop detection
         // - Consolidated EOP detection logic eliminates duplicate code
         // - Proper state transitions handle invalid_3 conditions in all states
+        // - CRITICAL: next_invalid_3 detection ONLY in WRITE_HEADER state to prevent duplicate packet drop
+        // - WRITE_DATA state only manages no_eop flag, actual invalid_3 detection happens in WRITE_HEADER
         unique case (write_state)
             IDLE_W: begin
                 // Use current cycle values (matching RTL behavior exactly)
@@ -1081,19 +1083,18 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                 // NEW: Consolidated EOP detection and no_eop management for WRITE_DATA state
                 if (ref_in_eop_r1 || tr.in_eop) begin
                     no_eop = 0;
-                    next_invalid_3 = 0;
                     `uvm_info("EOP_DETECTION", $sformatf("Time=%0t: EOP detected in WRITE_DATA: ref_in_eop_r1=%0b, tr.in_eop=%0b, no_eop cleared to 0", 
                              $time, ref_in_eop_r1, tr.in_eop), UVM_LOW)
                 end else if (tr.in_sop && !ref_in_eop_r1) begin
+                    // CRITICAL FIX: Only set no_eop=1 for new packet, do NOT set next_invalid_3
+                    // This prevents duplicate packet drop detection when transitioning to WRITE_HEADER
                     no_eop = 1;
-                    next_invalid_3 = 1;
-                    `uvm_info("INVALID_3_DETECTION", $sformatf("Time=%0t: INVALID_3 detected in WRITE_DATA: SOP=%0b, no_eop set to 1, next_invalid_3=1", 
-                             $time, tr.in_sop), UVM_LOW)
+                    `uvm_info("SOP_DETECTION", $sformatf("Time=%0t: SOP detected in WRITE_DATA: no_eop set to 1 (next_invalid_3 will be detected in WRITE_HEADER)", 
+                             $time), UVM_LOW)
                 end else begin
                     no_eop = no_eop;
-                    next_invalid_3 = next_invalid_3;  // Maintain current value
-                    `uvm_info("NO_EOP_MAINTAIN", $sformatf("Time=%0t: Maintaining no_eop=%0b, next_invalid_3=%0b in WRITE_DATA", 
-                             $time, no_eop, next_invalid_3), UVM_LOW)
+                    `uvm_info("NO_EOP_MAINTAIN", $sformatf("Time=%0t: Maintaining no_eop=%0b in WRITE_DATA (next_invalid_3 detection only in WRITE_HEADER)", 
+                             $time, no_eop), UVM_LOW)
                 end
             end
             
