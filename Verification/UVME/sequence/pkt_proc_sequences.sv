@@ -36,6 +36,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   
   bit [11:0] remaining_beats = 0;
   bit [7:0] packet_id = 0;
+  bit [31:0] random_data;
   
   // Transaction handle
   pkt_proc_seq_item tr;
@@ -362,7 +363,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       
       // Generate random data with high bit toggle probability
       // Use different random seeds for each word to maximize bit coverage
-      bit [31:0] random_data;
+   
       std::randomize(random_data) with {
         // Ensure high probability of bit toggles
         random_data dist {

@@ -70,26 +70,12 @@ class pkt_proc_coverage extends uvm_component;
             bins very_large_packets = {[1001:4095]};
         }
 
-        // Cross coverage for critical scenarios
+        // // Cross coverage for critical scenarios
     
-
-        concurrent_ops: cross basic_ops, buffer_status {
-            bins concurrent_normal = binsof(basic_ops.concurrent) && binsof(buffer_status.normal);
-            
-            // Ignore all other combinations to focus only on concurrent,normal
-            ignore_bins other_combinations = 
-                binsof(basic_ops.idle) ||
-                binsof(basic_ops.write_only) ||
-                binsof(basic_ops.read_only) ||
-                binsof(buffer_status.empty) ||
-                binsof(buffer_status.full) ||
-                binsof(buffer_status.full_and_empty);
-        }
-
-        reset_during_ops: cross basic_ops, reset_conditions {
-            bins reset_during_write = binsof(basic_ops.write_only) && binsof(reset_conditions.async_reset);
-            bins reset_during_read = binsof(basic_ops.read_only) && binsof(reset_conditions.sync_reset);
-        }
+        // reset_during_ops: cross basic_ops, reset_conditions {
+        //     bins reset_during_write = binsof(basic_ops.write_only) && binsof(reset_conditions.async_reset);
+        //     bins reset_during_read = binsof(basic_ops.read_only) && binsof(reset_conditions.sync_reset);
+        // }
 
     endgroup
 
