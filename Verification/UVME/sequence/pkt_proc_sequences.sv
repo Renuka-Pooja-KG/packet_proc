@@ -67,6 +67,9 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       16: invalid_3_scenario();
       17: invalid_4_scenario();
       18: invalid_5_scenario();
+      19: almost_full_toggle_scenario();
+      20: almost_empty_toggle_scenario();
+      21: dynamic_threshold_toggle_scenario();
       default: random_scenario();
     endcase
     `uvm_info(get_type_name(), "pkt_proc_base_sequence completed", UVM_LOW)
@@ -1148,6 +1151,112 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     read_data(10);
     
     `uvm_info(get_type_name(), "Invalid_5 scenario completed - Packet drop expected", UVM_LOW)
+  endtask
+
+  // ============================================================================
+  // NEW SCENARIOS FOR ALMOST FULL/EMPTY THRESHOLD TOGGLE
+  // ============================================================================
+
+  // Scenario 19: Almost Full Toggle - Write packets to approach almost full threshold and toggle the value
+  task almost_full_toggle_scenario();
+    initialize_dut();
+    
+    `uvm_info(get_type_name(), "Starting almost_full_toggle_scenario - Toggle almost_full_value during packet writes", UVM_LOW)
+    
+    // Phase 1: Write packets with initial almost_full_value = 28
+    `uvm_info(get_type_name(), "Phase 1: Writing packets with almost_full_value = 28", UVM_LOW)
+    almost_full_value = 5'd31;
+    almost_empty_value = 5'd4;
+    
+    // Write several packets to approach the almost full threshold
+    for (int pkt = 0; pkt < 3; pkt++) begin
+      write_packet(100, 32'hA000 + (pkt * 1000));
+      //send_idle_transaction(2);
+    end
+    
+    send_idle_transaction(2);
+    //read_data(300);
+    // Phase 2: Toggle almost_full_value to 20 and continue writing
+    `uvm_info(get_type_name(), "Phase 2: Toggling almost_full_value to 20 and continuing writes", UVM_LOW)
+    almost_full_value = 5'd20;
+    
+    // Write more packets with new threshold
+    for (int pkt = 3; pkt < 5; pkt++) begin
+      write_packet(100, 32'hD000 + (pkt * 800));
+      //send_idle_transaction(2);
+    end
+    
+    // Phase 3: Toggle almost_full_value to 15 and write final packets
+    `uvm_info(get_type_name(), "Phase 3: Toggling almost_full_value to 15 and writing final packets", UVM_LOW)
+    almost_full_value = 5'd15;
+    
+    // Write final packets with new threshold
+    for (int pkt = 5; pkt < 7; pkt++) begin
+      write_packet(100, 32'hF000 + (pkt * 600));
+      //send_idle_transaction(2);
+    end
+    
+    // Phase 4: Read some data to verify thresholds work
+    `uvm_info(get_type_name(), "Phase 4: Reading data to verify thresholds", UVM_LOW)
+    read_data(200);
+    
+    `uvm_info(get_type_name(), "Almost_full_toggle_scenario completed - almost_full_value toggled during packet writes", UVM_LOW)
+  endtask
+
+  // Scenario 20: Almost Empty Toggle - Read data to approach almost empty threshold and toggle the value
+  task almost_empty_toggle_scenario();
+    initialize_dut();
+    
+    `uvm_info(get_type_name(), "Starting almost_empty_toggle_scenario - Toggle almost_empty_value during packet operations", UVM_LOW)
+    
+    // Phase 1: Write packets to fill buffer
+    `uvm_info(get_type_name(), "Phase 1: Writing packets to fill buffer", UVM_LOW)
+    almost_full_value = 5'd28;
+    almost_empty_value = 5'd4;
+    
+    // Write packets to fill buffer
+    for (int pkt = 0; pkt < 4; pkt++) begin
+      write_packet(100, 32'hB000 + (pkt * 1200));
+      send_idle_transaction(2);
+    end
+    
+    // Phase 2: Read data with initial almost_empty_value = 4
+    `uvm_info(get_type_name(), "Phase 2: Reading data with almost_empty_value = 4", UVM_LOW)
+    read_data(400);
+    
+    // Phase 3: Toggle almost_empty_value to 8 and continue reading
+    `uvm_info(get_type_name(), "Phase 3: Toggling almost_empty_value to 8 and continuing reads", UVM_LOW)
+    almost_empty_value = 5'd8;
+    write_packet(200, 32'h1000);
+
+    // Read more data with new threshold
+    read_data(200);
+    send_idle_transaction(2);
+
+    almost_empty_value = 5'd31;
+    write_packet(200, 32'h2000);
+    read_data(200);
+    send_idle_transaction(2);
+
+    almost_empty_value = 5'd20;
+    write_packet(200, 32'h3000);
+    read_data(200);
+    send_idle_transaction(2);
+
+    // Phase 4: Toggle almost_empty_value to 12 and read final data
+    `uvm_info(get_type_name(), "Phase 4: Toggling almost_empty_value to 16 and reading final data", UVM_LOW)
+    almost_empty_value = 5'd16;
+    write_packet(200, 32'hE000);
+
+    
+    // Read final data with new threshold
+    read_data(100);
+    
+    // Phase 5: Write a small packet to verify thresholds still work
+    `uvm_info(get_type_name(), "Phase 5: Writing small packet to verify thresholds", UVM_LOW)
+    write_packet(200, 32'hE000);
+    
+    `uvm_info(get_type_name(), "Almost_empty_toggle_scenario completed - almost_empty_value toggled during reads", UVM_LOW)
   endtask
 
 

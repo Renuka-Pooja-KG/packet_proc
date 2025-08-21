@@ -36,7 +36,7 @@ class packet_read_test extends uvm_test;
     // Test 2: Clean read operations (no random enq_req)
     `uvm_info(get_type_name(), "Test 2: Clean read operations", UVM_LOW)
     seq.scenario = 3;  // Read-only scenario
-    seq.num_transactions = 21;  // Reduced from 50
+    seq.num_transactions = 20;  // Reduced from 50
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
     
     // Test 3: Write more packets for additional read testing
@@ -51,9 +51,20 @@ class packet_read_test extends uvm_test;
     // Test 4: Extended read operations
     `uvm_info(get_type_name(), "Test 4: Extended read operations", UVM_LOW)
     seq.scenario = 3;  // Read-only scenario
-    seq.num_transactions = 16;
+    seq.num_transactions = 20;
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
-    
+
+    `uvm_info(get_type_name(), "Test 5: Almost full toggle scenario", UVM_LOW)
+    seq.scenario = 19;  // Almost full toggle scenario
+    // seq.num_transactions = 10;
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
+
+    `uvm_info(get_type_name(), "Test 6: Almost empty toggle scenario", UVM_LOW)
+    seq.scenario = 20;  // Almost empty toggle scenario
+    // seq.num_transactions = 10;
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
+
+  
     
     // // Test 5: Underflow scenario (read when buffer is empty)
     // `uvm_info(get_type_name(), "Test 5: Underflow scenario (read from empty buffer)", UVM_LOW)
