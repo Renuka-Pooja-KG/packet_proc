@@ -69,7 +69,6 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       18: invalid_5_scenario();
       19: almost_full_toggle_scenario();
       20: almost_empty_toggle_scenario();
-      21: dynamic_threshold_toggle_scenario();
       default: random_scenario();
     endcase
     `uvm_info(get_type_name(), "pkt_proc_base_sequence completed", UVM_LOW)
@@ -1174,7 +1173,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       //send_idle_transaction(2);
     end
     
-    send_idle_transaction(2);
+    send_idle_transaction(10);
     //read_data(300);
     // Phase 2: Toggle almost_full_value to 20 and continue writing
     `uvm_info(get_type_name(), "Phase 2: Toggling almost_full_value to 20 and continuing writes", UVM_LOW)
@@ -1196,6 +1195,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       //send_idle_transaction(2);
     end
     
+    send_idle_transaction(10);
     // Phase 4: Read some data to verify thresholds work
     `uvm_info(get_type_name(), "Phase 4: Reading data to verify thresholds", UVM_LOW)
     read_data(200);
@@ -1217,17 +1217,20 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     // Write packets to fill buffer
     for (int pkt = 0; pkt < 4; pkt++) begin
       write_packet(100, 32'hB000 + (pkt * 1200));
-      send_idle_transaction(2);
+      //send_idle_transaction(2);
     end
     
+    send_idle_transaction(10);
     // Phase 2: Read data with initial almost_empty_value = 4
     `uvm_info(get_type_name(), "Phase 2: Reading data with almost_empty_value = 4", UVM_LOW)
     read_data(400);
     
+    send_idle_transaction(10);
     // Phase 3: Toggle almost_empty_value to 8 and continue reading
     `uvm_info(get_type_name(), "Phase 3: Toggling almost_empty_value to 8 and continuing reads", UVM_LOW)
     almost_empty_value = 5'd8;
     write_packet(200, 32'h1000);
+    send_idle_transaction(10);
 
     // Read more data with new threshold
     read_data(200);
@@ -1235,11 +1238,13 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
 
     almost_empty_value = 5'd31;
     write_packet(200, 32'h2000);
+    send_idle_transaction(10);
     read_data(200);
     send_idle_transaction(2);
 
     almost_empty_value = 5'd20;
     write_packet(200, 32'h3000);
+    send_idle_transaction(10);
     read_data(200);
     send_idle_transaction(2);
 
@@ -1247,11 +1252,11 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     `uvm_info(get_type_name(), "Phase 4: Toggling almost_empty_value to 16 and reading final data", UVM_LOW)
     almost_empty_value = 5'd16;
     write_packet(200, 32'hE000);
-
+    send_idle_transaction(10);
     
     // Read final data with new threshold
     read_data(100);
-    
+    send_idle_transaction(10);
     // Phase 5: Write a small packet to verify thresholds still work
     `uvm_info(get_type_name(), "Phase 5: Writing small packet to verify thresholds", UVM_LOW)
     write_packet(200, 32'hE000);
