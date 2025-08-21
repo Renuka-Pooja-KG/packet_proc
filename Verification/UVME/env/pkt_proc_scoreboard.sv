@@ -1536,6 +1536,13 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
     endfunction
 
     function void update_overflow_underflow(pkt_proc_seq_item tr);
+        // CRITICAL FIX: During reset, both overflow and underflow should be 0
+        if (ref_reset_active) begin
+            ref_pck_proc_overflow = 0;
+            ref_pck_proc_underflow = 0;
+            `uvm_info("RESET_OVERFLOW_UNDERFLOW", $sformatf("Time=%0t: RESET ACTIVE: Forcing overflow=0, underflow=0", $time), UVM_LOW)
+            return; // Exit early during reset
+        end
         // CRITICAL FIX: Overflow detection should be delayed by 2 cycles to match DUT's registered output
         // DUT's pck_proc_overflow goes high AFTER one clock pulse after pck_proc_full goes high
         // Scoreboard should use two-cycle delayed buffer_full state to match DUT timing
