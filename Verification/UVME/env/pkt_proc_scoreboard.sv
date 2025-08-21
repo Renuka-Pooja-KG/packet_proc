@@ -515,16 +515,45 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // Read operations using CURRENT pipeline register values (matching RTL exactly)
         // RTL uses deq_req_r (current pipeline register value) to generate rd_en, so scoreboard must do the same
         // This prevents the 1-cycle timing mismatch where rd_data_o is read even when deq_req=0
-        if (ref_deq_req_r && !ref_buffer_empty && (read_state == READ_HEADER || read_state == READ_DATA)) begin
-            // CRITICAL FIX: Simplified pointer-based timing - read immediately, advance pointer with delay
-            // Read data directly from buffer using current pointer (immediate)
+        
+        // Enhanced debug: Show current read pointer and buffer state before read operation
+        if (ref_deq_req_r) begin
+            `uvm_info("RD_POINTER_DEBUG", $sformatf("Time=%0t: Read request: deq_req_r=%0b, rd_ptr=%0d, buffer_empty=%0b, read_state=%0d", 
+                     $time, ref_deq_req_r, ref_rd_ptr, ref_buffer_empty, read_state), UVM_MEDIUM)
+            
+            // Enhanced debug: Show buffer contents around read pointer for debugging
+            if (!ref_buffer_empty && ref_rd_ptr < 20) begin // Only show for reasonable pointer values
+                `uvm_info("BUFFER_CONTENTS_DEBUG", $sformatf("Time=%0t: Buffer contents around rd_ptr=%0d: [%0d]=0x%0h, [%0d]=0x%0h, [%0d]=0x%0h", 
+                         $time, ref_rd_ptr, 
+                         ref_rd_ptr-1, (ref_rd_ptr > 0) ? ref_buffer[ref_rd_ptr-1] : 32'h0,
+                         ref_rd_ptr, ref_buffer[ref_rd_ptr],
+                         ref_rd_ptr+1, (ref_rd_ptr < 16383) ? ref_buffer[ref_rd_ptr+1] : 32'h0), UVM_HIGH)
+            end
+        end
+        
+        `uvm_info("READ_BUFFER_STATUS", $sformatf("Time=%0t: Buffer status signals:  buffer_empty=%0b, buffer_empty_prev=%0b, buffer_empty_prev2=%0b", 
+            ref_buffer_empty, ref_buffer_empty_prev, ref_buffer_empty_prev2), UVM_HIGH)
+        //if (ref_deq_req_r && !ref_buffer_empty && (read_state == READ_HEADER || read_state == READ_DATA)) begin
+        if (ref_deq_req_r && !ref_buffer_empty_prev2 && (read_state == READ_HEADER || read_state == READ_DATA)) begin
+
+            // CRITICAL FIX: Read data using CURRENT read pointer (not next cycle's pointer)
+            // This ensures we read from the correct buffer location
             ref_rd_data_o = ref_buffer[ref_rd_ptr[13:0]];
             // Calculate next read pointer position (will be updated on next cycle)
             ref_rd_ptr_next = ref_rd_ptr + 1;
             `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: Read operation: deq_req_r=%0b, state=%0d, rd_data=0x%0h, current_ptr=%0d, next_ptr=%0d (pointer advances next cycle)", 
                      $time, ref_deq_req_r, read_state, ref_rd_data_o, ref_rd_ptr, ref_rd_ptr_next), UVM_LOW)
+       // end else if (ref_deq_req_r && ref_buffer_empty) begin
+       end else if (ref_deq_req_r && ref_buffer_empty_prev2) begin
+            // CRITICAL FIX: When buffer is empty and deq_req is high, set rd_data_o to 0
+            // This matches RTL behavior where empty buffer reads return 0
+            ref_rd_data_o = 32'h0;
+            ref_rd_ptr_next = ref_rd_ptr; // Don't advance pointer when buffer is empty
+            `uvm_info("RD_DATA_DEBUG", $sformatf("Time=%0t: Empty buffer read: deq_req_r=%0b, state=%0d, rd_data=0x0, current_ptr=%0d (buffer empty, no pointer advance)", 
+                     $time, ref_deq_req_r, read_state, ref_rd_ptr), UVM_LOW)
         end else begin
-            // No read operation this cycle - keep pointer unchanged
+            // No read operation this cycle - keep pointer unchanged and clear rd_data_o
+            ref_rd_data_o = 32'h0;
             ref_rd_ptr_next = ref_rd_ptr;
         end
             
@@ -931,8 +960,18 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
             ref_buffer_empty_r = 1;
             ref_wr_en = 0;
             ref_rd_en = 0;
+            ref_wr_en_prev = 0;
+            ref_rd_en_prev = 0;
+            ref_deq_req_prev = 0;
+            //ref_rd_data_delayed = 0;
+            ref_deq_req_prev2 = 0;
+            ref_buffer_full_prev = 0;
+            ref_buffer_empty_prev = 1;
+            ref_buffer_full_prev2 = 0;  // Initialize two-cycle delayed buffer_full
+            ref_buffer_empty_prev2 = 1; // Initialize two-cycle delayed buffer_empty
+            
+            // Initialize write level tracking
             ref_wr_lvl_next = 0;
-            ref_rd_ptr_next = 0;  // Reset next cycle's read pointer
             
             return; // Exit early - no further processing during reset
         end
