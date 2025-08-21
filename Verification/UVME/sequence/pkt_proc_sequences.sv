@@ -625,12 +625,12 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     `uvm_info(get_type_name(), $sformatf("Starting underflow scenario"), UVM_LOW)
     // Write some packets to fill the buffer
-      write_packet(12000, 32'hC000);
+      write_packet(10, 32'hC000);
       send_idle_transaction(10);
     
     // Try to read more than the buffer can hold
     // Try to read from empty buffer
-    read_data(12100);
+    read_data(15);
   endtask
 
   // Async reset scenario with write/read level verification

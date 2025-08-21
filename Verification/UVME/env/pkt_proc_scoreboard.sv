@@ -628,13 +628,22 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
                      $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
         end else if (ref_rd_en) begin
             // Read only: wr_lvl decreases by 1 (wr_ptr stays, rd_ptr advances)
-            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
+            if(ref_wr_lvl == 0) begin
+                ref_wr_lvl_next = ref_wr_lvl;
+            end else begin
+                ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
+            end
             `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: READ ONLY: wr_lvl_next=%0d (wr_ptr_next=%0d - rd_ptr_next=%0d)", 
                      $time, ref_wr_lvl_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
         end else if (tr.deq_req && !ref_buffer_empty && (read_state_next == READ_HEADER || read_state_next == READ_DATA)) begin
             // PENDING READ: deq_req is asserted and FSM will transition to read state next cycle
             // wr_lvl should decrease by 1 because read will happen next cycle
-            ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
+            //ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
+             if(ref_wr_lvl == 0) begin
+                ref_wr_lvl_next = ref_wr_lvl;
+            end else begin
+                ref_wr_lvl_next = ref_wr_ptr_next - ref_rd_ptr_next - 1;
+            end
             `uvm_info("WR_LVL_NEXT", $sformatf("Time=%0t: PENDING READ: wr_lvl_next=%0d (deq_req=1, next_state=%0d, wr_ptr_next=%0d - rd_ptr_next=%0d - 1)", 
                      $time, ref_wr_lvl_next, read_state_next, ref_wr_ptr_next, ref_rd_ptr_next), UVM_LOW)
         end else begin
