@@ -693,6 +693,8 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ============================================================================
         // PHASE 13: Update pipeline registers (simultaneous update matching RTL <=)
         // ============================================================================
+       
+        update_outputs(tr);  
         `uvm_info("PIPELINE_TIMING", $sformatf("Time=%0t: Updating pipeline registers for next cycle use (matching RTL <= behavior)", $time), UVM_LOW)
         update_pipeline_registers(tr);
         
@@ -705,7 +707,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         // ============================================================================
         // PHASE 14: Update outputs (AFTER pipeline registers are updated)
         // ============================================================================
-        update_outputs(tr);                        // Sets ref_out_sop, ref_out_eop, ref_count_r (now uses updated ref_deq_req_r)
+       // update_outputs(tr);                        // Sets ref_out_sop, ref_out_eop, ref_count_r (now uses updated ref_deq_req_r)
         
         // ============================================================================
         // PHASE 15: Final updates for next cycle
