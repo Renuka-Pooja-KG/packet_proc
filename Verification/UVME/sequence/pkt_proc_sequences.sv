@@ -69,6 +69,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
       18: invalid_5_scenario();
       19: almost_full_toggle_scenario();
       20: almost_empty_toggle_scenario();
+      21: pck_len_coverage_scenario();
       default: random_scenario();
     endcase
     `uvm_info(get_type_name(), "pkt_proc_base_sequence completed", UVM_LOW)
@@ -737,6 +738,12 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     // Try to read more than the buffer can hold
     // Try to read from empty buffer
     read_data(15);
+    send_idle_transaction(5);
+    write_packet(100, 32'hD000);
+    send_idle_transaction(5);
+    read_data(105);
+
+   
   endtask
 
   // Async reset scenario with write/read level verification
@@ -1368,6 +1375,177 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     `uvm_info(get_type_name(), "Almost_empty_toggle_scenario completed - almost_empty_value toggled during reads", UVM_LOW)
   endtask
 
+// Scenario 21: Comprehensive packet length coverage to toggle high bits [11:7] of pck_len and count signals
+  task pck_len_coverage_scenario();
+    initialize_dut();
+    
+    `uvm_info(get_type_name(), "Starting pck_len_coverage_scenario - Targeting high bits [11:7] coverage", UVM_LOW)
+    
+    // Phase 1: Large packets to toggle high bits [11:7] of pck_len_r and pck_len_reg
+    // Target: 12'h800 (2048), 12'hA00 (2560), 12'hC00 (3072), 12'hE00 (3584), 12'hFFF (4095)
+    `uvm_info(get_type_name(), "Phase 1: Writing large packets to toggle high bits [11:7] of pck_len signals", UVM_LOW)
+    
+    // Packet 1: 2048 words (12'h800) - targets bit 11
+    write_packet_with_specific_length(2048, 32'h8000);
+    send_idle_transaction(5);
+    
+    // Packet 2: 2560 words (12'hA00) - targets bit 11 and 9
+    write_packet_with_specific_length(2560, 32'h9000);
+    send_idle_transaction(5);
+    
+    // Packet 3: 3072 words (12'hC00) - targets bit 11 and 10
+    write_packet_with_specific_length(3072, 32'hA000);
+    send_idle_transaction(5);
+    
+    // Packet 4: 3584 words (12'hE00) - targets bit 11, 10, 9
+    write_packet_with_specific_length(3584, 32'hB000);
+    send_idle_transaction(5);
+    
+    // Packet 5: 4095 words (12'hFFF) - targets all bits [11:0]
+    write_packet_with_specific_length(4095, 32'hC000);
+    send_idle_transaction(10);
+    
+    // Phase 2: Read data to approach count_r high bits and trigger pck_len_rd coverage
+    `uvm_info(get_type_name(), "Phase 2: Reading data to approach count_r high bits [11:7]", UVM_LOW)
+    
+    // Read large chunks to get count_r to high values
+    read_data(3000);  // This should get count_r to around 1095 (3000 - 1905 remaining)
+    send_idle_transaction(5);
+    
+    read_data(2000);  // This should get count_r to around 3095
+    send_idle_transaction(5);
+    
+    read_data(1000);  // This should get count_r to around 4095
+    send_idle_transaction(5);
+    
+    // Phase 3: Medium packets with specific lengths to target remaining high bits
+    `uvm_info(get_type_name(), "Phase 3: Writing medium packets with specific lengths for remaining high bits", UVM_LOW)
+    
+    // Packet 6: 1024 words (12'h400) - targets bit 10
+    write_packet_with_specific_length(1024, 32'hD000);
+    send_idle_transaction(5);
+    
+    // Packet 7: 1536 words (12'h600) - targets bit 10 and 9
+    write_packet_with_specific_length(1536, 32'hE000);
+    send_idle_transaction(5);
+    
+    // Packet 8: 1792 words (12'h700) - targets bit 10, 9, 8
+    write_packet_with_specific_length(1792, 32'hF000);
+    send_idle_transaction(5);
+    
+    // Phase 4: Edge case packets to ensure complete coverage
+    `uvm_info(get_type_name(), "Phase 4: Edge case packets for complete coverage", UVM_LOW)
+    
+    // Packet 9: 512 words (12'h200) - targets bit 9
+    write_packet_with_specific_length(512, 32'h1000);
+    send_idle_transaction(5);
+    
+    // Packet 10: 768 words (12'h300) - targets bit 9 and 8
+    write_packet_with_specific_length(768, 32'h2000);
+    send_idle_transaction(5);
+    
+    // Packet 11: 896 words (12'h380) - targets bit 9, 8, 7
+    write_packet_with_specific_length(896, 32'h3000);
+    send_idle_transaction(5);
+    
+    // Phase 5: Final verification and cleanup
+    `uvm_info(get_type_name(), "Phase 5: Final verification and cleanup", UVM_LOW)
+    
+    // Read remaining data to verify all thresholds work
+    read_data(5000);
+    send_idle_transaction(5);
+    
+    // Write one final small packet
+    write_packet(100, 32'h4000);
+    send_idle_transaction(5);
+
+    // Phase 6: Write a packet with zero SOP data
+    `uvm_info(get_type_name(), "Phase 6: Writing packet with zero SOP data", UVM_LOW)
+    write_packet_with_zero_sop_data();
+    send_idle_transaction(5);
+    
+    `uvm_info(get_type_name(), "pck_len_coverage_scenario completed - High bits [11:7] coverage targeted", UVM_LOW)
+  endtask
+
+  // Helper task to write packet with specific length (not using write_packet to ensure exact length)
+  task write_packet_with_specific_length(int pkt_length, bit [31:0] base_data);
+    `uvm_info(get_type_name(), $sformatf("Writing packet with EXACT length %0d (0x%03h) to target high bits", 
+             pkt_length, pkt_length[11:0]), UVM_MEDIUM)
+
+    if (pkt_length <= 0) begin
+      `uvm_error(get_type_name(), "Packet length must be >= 1")
+      return;
+    end
+
+    for (int i = 0; i < pkt_length; i++) begin
+      // Calculate packet control signals before transaction creation
+      bit is_sop = (i == 0);
+      bit is_eop = (i == pkt_length-1);
+      string tr_name = is_sop ? "tr_sop_specific" : (is_eop ? "tr_eop_specific" : $sformatf("tr_data_specific_%0d", i));
+
+      tr = pkt_proc_seq_item::type_id::create(tr_name);
+      start_item(tr);
+      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
+      tr.empty_de_assert = 1'b0;
+      tr.enq_req = 1'b1;
+      tr.deq_req = 1'b0;
+      tr.in_sop = is_sop;
+      tr.in_eop = is_eop;
+      tr.wr_data_i = base_data + i;
+      tr.pck_len_valid = is_sop;
+      tr.pck_len_i = pkt_length[11:0];  // Exact length to target specific bits
+      tr.pck_proc_almost_full_value = 5'd31;
+      tr.pck_proc_almost_empty_value = 5'd16;
+      finish_item(tr);
+    end
+    
+    `uvm_info(get_type_name(), $sformatf("Completed writing packet with length %0d (0x%03h)", 
+             pkt_length, pkt_length[11:0]), UVM_MEDIUM)
+  endtask
+
+  // Add this to your existing scenarios or create a new one
+task write_packet_with_zero_sop_data();
+  `uvm_info(get_type_name(), "Writing packet with zero SOP data for coverage", UVM_LOW)
+  
+  // Write packet header with explicit zero data
+  tr = pkt_proc_seq_item::type_id::create("tr_zero_sop");
+  start_item(tr);
+  tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+  tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
+  tr.empty_de_assert = 1'b0;
+  tr.enq_req = 1'b1;
+  tr.deq_req = 1'b0;
+  tr.in_sop = 1'b1;        // Start of packet
+  tr.in_eop = 1'b0;        // Not end of packet
+  tr.wr_data_i = 32'h0;    // EXPLICIT ZERO for SOP - targets Index 4
+  tr.pck_len_valid = 1'b1;
+  tr.pck_len_i = 12'h0005; // Packet length = 5
+  tr.pck_proc_almost_full_value = almost_full_value;
+  tr.pck_proc_almost_empty_value = almost_empty_value;
+  finish_item(tr);
+  
+  // Continue with normal packet data
+  for (int i = 1; i < 5; i++) begin
+    tr = pkt_proc_seq_item::type_id::create($sformatf("tr_zero_sop_data_%0d", i));
+    start_item(tr);
+    tr.pck_proc_int_mem_fsm_rstn = 1'b1;
+    tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
+    tr.empty_de_assert = 1'b0;
+    tr.enq_req = 1'b1;
+    tr.deq_req = 1'b0;
+    tr.in_sop = 1'b0;
+    tr.in_eop = (i == 4);  // EOP on last word
+    tr.wr_data_i = 32'hA000 + i;
+    tr.pck_len_valid = 1'b0;
+    tr.pck_len_i = 12'h0005;
+    tr.pck_proc_almost_full_value = almost_full_value;
+    tr.pck_proc_almost_empty_value = almost_empty_value;
+    finish_item(tr);
+  end
+  
+  `uvm_info(get_type_name(), "Completed packet with zero SOP data", UVM_LOW)
+endtask
 
 endclass
 
