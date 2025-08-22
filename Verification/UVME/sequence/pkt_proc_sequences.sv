@@ -37,6 +37,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
   bit [11:0] remaining_beats = 0;
   bit [7:0] packet_id = 0;
   bit [31:0] random_data;
+  int total_written = 0;
   
   // Transaction handle
   pkt_proc_seq_item tr;
@@ -1663,8 +1664,9 @@ endtask
     `uvm_info(get_type_name(), "Phase 1: Filling buffer to capacity", UVM_LOW)
     
     // Write packets until buffer is full
-    int total_written = 0;
-    int packet_count = 0;
+    //int total_written = 0;
+    total_written = 0;
+    packet_count = 0;
     
     while (total_written < 16000 && packet_count < 20) begin  // Buffer capacity is 16384
       int packet_length = 800 + (packet_count % 400);  // 800-1200 words
