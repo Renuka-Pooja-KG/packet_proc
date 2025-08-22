@@ -1559,7 +1559,7 @@ class pkt_proc_scoreboard extends uvm_scoreboard;
         end
 
         // Underflow detection - use two-cycle delayed buffer_empty state
-        if (tr.deq_req && ref_buffer_empty_prev2) begin
+        if ((tr.deq_req || ref_deq_req_r) && ref_buffer_empty_prev2) begin
             ref_pck_proc_underflow = 1;
             `uvm_info("UNDERFLOW_DEBUG", $sformatf("Time=%0t: Underflow detected (delayed by 2 cycles): deq_req=%0b, buffer_empty_prev2=%0b", 
                      $time, tr.deq_req, ref_buffer_empty_prev2), UVM_LOW)

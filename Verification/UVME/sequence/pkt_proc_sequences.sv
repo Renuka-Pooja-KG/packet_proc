@@ -738,7 +738,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     // Try to read more than the buffer can hold
     // Try to read from empty buffer
     read_data(15);
-    send_idle_transaction(5);
+    //initialize_dut();
     write_packet(100, 32'hD000);
     send_idle_transaction(5);
     read_data(105);

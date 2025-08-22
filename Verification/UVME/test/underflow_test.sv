@@ -29,10 +29,6 @@ class underflow_test extends uvm_test;
     // Start the sequence
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
 
-    // `uvm_info(get_type_name(), "Starting pck_len_coverage_scenario", UVM_LOW)
-    // seq.scenario = 21;
-    // seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
-
     `uvm_info(get_type_name(), "Underflow test run_phase completed", UVM_LOW)
     phase.drop_objection(this);
   endtask

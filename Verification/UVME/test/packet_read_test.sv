@@ -64,6 +64,11 @@ class packet_read_test extends uvm_test;
     // seq.num_transactions = 10;
     seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
 
+    `uvm_info(get_type_name(), "Starting pck_len_coverage_scenario", UVM_LOW)
+    seq.scenario = 21;
+    seq.start(m_env.m_pkt_proc_agent.m_pkt_proc_sequencer);
+
+
   
     
     // // Test 5: Underflow scenario (read when buffer is empty)
