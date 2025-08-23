@@ -1519,27 +1519,27 @@ endtask
     `uvm_info(get_type_name(), "Phase 6: Writing additional packet lengths for complete coverage", UVM_LOW)
     
     // Packet 6: 1024 words (12'h400) - targets bit 10
-    write_packet_with_specific_length(1024, 32'hD000);
+    write_packet(1024, 32'hD000);
     send_idle_transaction(5);
     
     // Packet 7: 1536 words (12'h600) - targets bit 10 and 9
-    write_packet_with_specific_length(1536, 32'hE000);
+    write_packet(1536, 32'hE000);
     send_idle_transaction(5);
     
     // Packet 8: 1792 words (12'h700) - targets bit 10, 9, 8
-    write_packet_with_specific_length(1792, 32'hF000);
+    write_packet(1792, 32'hF000);
     send_idle_transaction(5);
     
     // Packet 9: 512 words (12'h200) - targets bit 9
-    write_packet_with_specific_length(512, 32'h1000);
+    write_packet(512, 32'h1000);
     send_idle_transaction(5);
     
     // Packet 10: 768 words (12'h300) - targets bit 9 and 8
-    write_packet_with_specific_length(768, 32'h2000);
+    write_packet(768, 32'h2000);
     send_idle_transaction(5);
     
     // Packet 11: 896 words (12'h380) - targets bit 9, 8, 7
-    write_packet_with_specific_length(896, 32'h3000);
+    write_packet(896, 32'h3000);
     send_idle_transaction(5);
     
     // ============================================================================
