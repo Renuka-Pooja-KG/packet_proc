@@ -1495,29 +1495,11 @@ endtask
       send_idle_transaction(1);
     end
     
-    // Write one more packet to trigger overflow and ensure buffer_full toggles
-    write_packet(1000, 32'h12000);
-    send_idle_transaction(5);
-    
-    // ============================================================================
-    // PHASE 4: READ OPERATIONS TO TRIGGER pck_len_rd COVERAGE
-    // ============================================================================
-    `uvm_info(get_type_name(), "Phase 4: Reading data to trigger pck_len_rd coverage and toggle rd_addr bits", UVM_LOW)
-    
-    // Read large chunks to get count_r to high values and trigger pck_len_rd
-    read_data(6000);  // Read significant portion of buffer
-    //send_idle_transaction(5);
-    
-    read_data(6000);  // Continue reading
-    //send_idle_transaction(5);
-    
-    read_data(4000);  // Final large read
-    //send_idle_transaction(5);
     // ============================================================================
     // PHASE 6: ADDITIONAL PACKET LENGTHS FOR COMPLETE COVERAGE
     // ============================================================================
     `uvm_info(get_type_name(), "Phase 6: Writing additional packet lengths for complete coverage", UVM_LOW)
-    
+    initialize_dut();
     // Packet 6: 1024 words (12'h400) - targets bit 10
     write_packet(1024, 32'hD000);
     send_idle_transaction(5);
