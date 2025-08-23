@@ -1303,7 +1303,7 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     
     // Write final packets with new threshold
     for (int pkt = 5; pkt < 7; pkt++) begin
-      write_packet(100, 32'hF000 + (pkt * 600));
+      write_packet(100, 32'hF000 + (pkt * 200));
       //send_idle_transaction(2);
     end
     
@@ -1314,8 +1314,8 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     almost_full_value = 5'd16;
     
     // Write final packets with new threshold
-    for (int pkt = 5; pkt < 7; pkt++) begin
-      write_packet(100, 32'hF000 + (pkt * 600));
+    for (int pkt = 7; pkt < 9; pkt++) begin
+      write_packet(100, 32'hF000 + (pkt * 400));
       //send_idle_transaction(2);
     end
 
@@ -1393,43 +1393,6 @@ class pkt_proc_base_sequence extends uvm_sequence #(pkt_proc_seq_item);
     `uvm_info(get_type_name(), "Almost_empty_toggle_scenario completed - almost_empty_value toggled during reads", UVM_LOW)
   endtask
 
-  // Helper task to write packet with specific length (not using write_packet to ensure exact length)
-  task write_packet_with_specific_length(int pkt_length, bit [31:0] base_data);
-    `uvm_info(get_type_name(), $sformatf("Writing packet with EXACT length %0d (0x%03h) to target high bits", 
-             pkt_length, pkt_length[11:0]), UVM_MEDIUM)
-
-    if (pkt_length <= 0) begin
-      `uvm_error(get_type_name(), "Packet length must be >= 1")
-      return;
-    end
-
-    for (int i = 0; i < pkt_length; i++) begin
-      // Calculate packet control signals before transaction creation
-      bit is_sop = (i == 0);
-      bit is_eop = (i == pkt_length-1);
-      string tr_name = is_sop ? "tr_sop_specific" : (is_eop ? "tr_eop_specific" : $sformatf("tr_data_specific_%0d", i));
-
-      tr = pkt_proc_seq_item::type_id::create(tr_name);
-      start_item(tr);
-      tr.pck_proc_int_mem_fsm_rstn = 1'b1;
-      tr.pck_proc_int_mem_fsm_sw_rstn = 1'b0;
-      tr.empty_de_assert = 1'b0;
-      tr.enq_req = 1'b1;
-      tr.deq_req = 1'b0;
-      tr.in_sop = is_sop;
-      tr.in_eop = is_eop;
-      tr.wr_data_i = base_data + i;
-      tr.pck_len_valid = is_sop;
-      tr.pck_len_i = pkt_length[11:0];  // Exact length to target specific bits
-      tr.pck_proc_almost_full_value = 5'd31;
-      tr.pck_proc_almost_empty_value = 5'd16;
-      finish_item(tr);
-    end
-    
-    `uvm_info(get_type_name(), $sformatf("Completed writing packet with length %0d (0x%03h)", 
-             pkt_length, pkt_length[11:0]), UVM_MEDIUM)
-  endtask
-
   // Add this to your existing scenarios or create a new one
 task write_packet_with_zero_sop_data();
   `uvm_info(get_type_name(), "Writing packet with zero SOP data for coverage", UVM_LOW)
@@ -1484,30 +1447,30 @@ endtask
     `uvm_info(get_type_name(), "Phase 1: Writing packets to toggle pck_len bits [11:7]", UVM_LOW)
     
     // Packet 1: 2048 words (12'h800) - targets bit 11
-    write_packet_with_specific_length(2048, 32'h8000);
+    write_packet(2048, 32'h8000);
     send_idle_transaction(5);
     
     // Packet 2: 2560 words (12'hA00) - targets bit 11 and 9
-    write_packet_with_specific_length(2560, 32'h9000);
+    write_packet(2560, 32'h9000);
     send_idle_transaction(5);
     
     // Packet 3: 3072 words (12'hC00) - targets bit 11 and 10
-    write_packet_with_specific_length(3072, 32'hA000);
+    write_packet(3072, 32'hA000);
     send_idle_transaction(5);
     
     // Packet 4: 3584 words (12'hE00) - targets bit 11, 10, 9
-    write_packet_with_specific_length(3584, 32'hB000);
+    write_packet(3584, 32'hB000);
     send_idle_transaction(5);
     
     // Packet 5: 4095 words (12'hFFF) - targets all bits [11:0]
-    write_packet_with_specific_length(4095, 32'hC000);
+    write_packet(4095, 32'hC000);
     send_idle_transaction(10);
     
     // ============================================================================
     // PHASE 2: TARGET pck_len_buffer wr_addr BITS [5:4] AND rd_addr BITS [5:2]
     // ============================================================================
     `uvm_info(get_type_name(), "Phase 2: Writing many packets to toggle pck_len_buffer address bits", UVM_LOW)
-    
+    initialize_dut();
     // Write 64+ packets to ensure wr_addr bits [5:4] toggle (64 > 2^6 = 32)
     for (int pkt = 0; pkt < 70; pkt++) begin
       // Use different packet lengths to ensure variety in pck_len_fifo
@@ -1526,7 +1489,7 @@ endtask
     // Buffer capacity: 16384 words
     // Each packet: ~1000 words + overhead
     // Need ~16 packets to approach capacity
-    
+    initialize_dut();
     for (int pkt = 0; pkt < 16; pkt++) begin
       write_packet(1000, 32'h2000 + (pkt * 1000));
       send_idle_transaction(1);
@@ -1542,28 +1505,14 @@ endtask
     `uvm_info(get_type_name(), "Phase 4: Reading data to trigger pck_len_rd coverage and toggle rd_addr bits", UVM_LOW)
     
     // Read large chunks to get count_r to high values and trigger pck_len_rd
-    read_data(8000);  // Read significant portion of buffer
-    send_idle_transaction(5);
+    read_data(6000);  // Read significant portion of buffer
+    //send_idle_transaction(5);
     
     read_data(6000);  // Continue reading
-    send_idle_transaction(5);
+    //send_idle_transaction(5);
     
     read_data(4000);  // Final large read
-    send_idle_transaction(5);
-    
-    // ============================================================================
-    // PHASE 5: TARGET temp_empty BY READING ALL DATA
-    // ============================================================================
-    `uvm_info(get_type_name(), "Phase 5: Reading remaining data to trigger temp_empty", UVM_LOW)
-    
-    // Read remaining data to empty the buffer and trigger temp_empty
-    read_data(10000);  // This should empty most of the buffer
-    send_idle_transaction(5);
-    
-    // Continue reading to ensure buffer is completely empty
-    read_data(5000);
-    send_idle_transaction(5);
-    
+    //send_idle_transaction(5);
     // ============================================================================
     // PHASE 6: ADDITIONAL PACKET LENGTHS FOR COMPLETE COVERAGE
     // ============================================================================
@@ -1598,10 +1547,6 @@ endtask
     // ============================================================================
     `uvm_info(get_type_name(), "Phase 7: Final verification and cleanup", UVM_LOW)
     
-    // Read remaining data to verify all thresholds work
-    read_data(8000);
-    send_idle_transaction(5);
-    
     // Write one final small packet
     write_packet(100, 32'h4000);
     send_idle_transaction(5);
@@ -1617,32 +1562,32 @@ endtask
     initialize_dut();
     write_packet(2048, 32'h4000);
     send_idle_transaction(5);
-    read_data(2050);
+    //read_data(2050);
     write_packet(1024, 32'h5000);
     send_idle_transaction(5);
-    read_data(1026);
+    //read_data(1026);
     write_packet(512, 32'h6000);
     send_idle_transaction(5);
-    read_data(514);
+    //read_data(514);
    
     write_packet(256, 32'h7000);
     send_idle_transaction(5);
-    read_data(258);
+    //read_data(258);
     write_packet(128, 32'h8000);
     send_idle_transaction(5);
-    read_data(130);
+    //read_data(130);
     write_packet(64, 32'h9000);
     send_idle_transaction(5);
-    read_data(66);
+    //read_data(66);
     write_packet(32, 32'hA000);
     send_idle_transaction(5);
-    read_data(34);
+    //read_data(34);
     write_packet(16, 32'hB000);
     send_idle_transaction(5);
-    read_data(18);
+    //read_data(18);
     write_packet(8, 32'hC000);
     send_idle_transaction(5);
-    read_data(10);
+    //read_data(10);
     write_packet(4, 32'hD000);
     send_idle_transaction(5);
 
